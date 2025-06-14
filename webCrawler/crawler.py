@@ -14,10 +14,11 @@ stop_words = set(stopwords.words('spanish'))
 visited = set()
 base_url = "https://es.wikipedia.org"
 output_dir = "wiki_data"
-max_pages = 5000
-max_depth = 2
+max_pages = 5
+max_depth = 1
 
 os.makedirs(output_dir, exist_ok=True)
+output_file_path = os.path.join(output_dir, "wiki_data.jsonl")
 
 def clean_text(text):
     text = unidecode(text.lower())
@@ -26,7 +27,7 @@ def clean_text(text):
     return words
 
 def extract_edits_per_day(url):
-    return 0  # Placeholder (se puede mejorar después)
+    return 0  # Placeholder
 
 def parse_page(url, depth):
     if url in visited or depth > max_depth or len(visited) >= max_pages:
@@ -36,7 +37,7 @@ def parse_page(url, depth):
     print(f"[{len(visited)}] Visitando: {url}")
 
     try:
-        res = requests.get(url)
+        res = requests.get(url, timeout=10)
         soup = BeautifulSoup(res.text, 'html.parser')
 
         title = soup.find('h1').text if soup.find('h1') else "Sin título"
@@ -64,9 +65,8 @@ def parse_page(url, depth):
             'links': list(links)
         }
 
-        file_name = os.path.join(output_dir, f"{len(visited)}.json")
-        with open(file_name, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        with open(output_file_path, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(data, ensure_ascii=False) + '\n')
 
         for link in links:
             if len(visited) >= max_pages:
