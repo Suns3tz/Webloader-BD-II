@@ -10,7 +10,6 @@ from nltk import word_tokenize
 from nltk.util import ngrams
 from unidecode import unidecode
 from datetime import datetime, timedelta
-import locale
 
 stop_words = set(stopwords.words('spanish')) # Carga palabras vacías en español
 visited = set()
@@ -30,7 +29,7 @@ def clean_text(text):
     words = [w for w in words if w.isalpha() and w not in stop_words]
     return words
 
-# Calcular ediciones por dia de pagina
+# Calcular promedio de ediciones por día desde la creación de la página
 def extract_edits_per_day(soup, url):
     try:
         # Obtener el enlace al historial de la página
@@ -52,14 +51,13 @@ def extract_edits_per_day(soup, url):
         if not edit_rows:
             return 0
         
-        # Contar ediciones de un solo día
-        current_date = datetime.now().date()
-        one_day_ago = current_date - timedelta(days=1)
-        recent_edits = 0
-        
         # Mapeo de meses en español
         months = {'ene': 1, 'feb': 2, 'mar': 3, 'abr': 4, 'may': 5, 'jun': 6,
                   'jul': 7, 'ago': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dic': 12}
+        
+        total_edits = 0
+        creation_date = None
+        latest_date = None
         
         for row in edit_rows:
             try:
@@ -73,13 +71,25 @@ def extract_edits_per_day(soup, url):
                     
                     if month > 0:
                         edit_date = datetime(year, month, day).date()
-                        if edit_date >= one_day_ago:
-                            recent_edits += 1
+                        total_edits += 1
+                        
+                        # Actualizar fechas más temprana y más tardía
+                        if creation_date is None or edit_date < creation_date:
+                            creation_date = edit_date
+                        if latest_date is None or edit_date > latest_date:
+                            latest_date = edit_date
                             
             except (ValueError, IndexError):
                 continue
         
-        return recent_edits
+        # Calcular promedio de ediciones por día
+        if total_edits > 0 and creation_date and latest_date:
+            days_span = (latest_date - creation_date).days + 1  # +1 para incluir el día de creación
+            if days_span > 0:
+                avg_edits_per_day = total_edits / days_span
+                return round(avg_edits_per_day, 4)
+        
+        return 0
         
     except Exception:
         return 0
