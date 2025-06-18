@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebLoader - Análisis de Páginas Web</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1><i class="fas fa-globe"></i> WebLoader</h1>
+            <p>Sistema de Análisis de Páginas Web con Hadoop y Spark</p>
+            <div class="docker-status" id="dockerStatus">
+                <i class="fas fa-docker"></i>
+                <span id="dockerStatusText">Verificando Docker...</span>
+            </div>
+        </header>
+
+        <!-- Sección Principal de Análisis -->
+        <section class="main-section">
+            <div class="analysis-card">
+                <h2><i class="fas fa-chart-line"></i> Configurar Análisis</h2>
+                
+                <!-- Formulario de Análisis -->
+                <form id="analysisForm" class="analysis-form">
+                    <!-- Tipo de Análisis -->
+                    <div class="form-group">
+                        <label for="analysisType">
+                            <i class="fas fa-cogs"></i> Tipo de Análisis
+                        </label>
+                        <select id="analysisType" name="analysis_type" required>
+                            <option value="">Selecciona un tipo de análisis</option>
+                            <option value="word_frequency">Frecuencia de Palabras</option>
+                            <option value="word_pairs">Pares de Palabras</option>
+                            <option value="word_triplets">Tripletas de Palabras</option>
+                            <option value="page_similarity">Similitud entre Páginas</option>
+                            <option value="link_analysis">Análisis de Enlaces</option>
+                            <option value="custom">Análisis Personalizado</option>
+                        </select>
+                    </div>
+
+                    <!-- Configuración de Análisis -->
+                    <div class="form-group">
+                        <label for="analysisConfig">
+                            <i class="fas fa-sliders-h"></i> Configuración
+                        </label>
+                        <div class="config-options" id="configOptions">
+                            <!-- Las opciones aparecerán dinámicamente según el tipo seleccionado -->
+                        </div>
+                    </div>
+
+                    <!-- Botones de Acción -->
+                    <div class="action-buttons">
+                        <button type="submit" class="btn btn-primary" id="startAnalysis">
+                            <i class="fas fa-play"></i> Iniciar Análisis
+                        </button>
+                        <button type="button" class="btn btn-secondary" id="resetForm">
+                            <i class="fas fa-redo"></i> Reiniciar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- Estado de Servicios -->
+        <section class="services-section">
+            <h2><i class="fas fa-server"></i> Estado de Servicios</h2>
+            <div class="services-grid" id="servicesGrid">
+                <!-- Los servicios se cargarán dinámicamente -->
+            </div>
+        </section>
+
+        <!-- Sección de Resultados (placeholder) -->
+        <section class="results-section" id="resultsSection" style="display: none;">
+            <h2><i class="fas fa-chart-bar"></i> Resultados del Análisis</h2>
+            <div class="results-content" id="resultsContent">
+                <!-- Los resultados aparecerán aquí cuando se implemente la lógica -->
+            </div>
+        </section>
+
+        <!-- Información del Sistema -->
+        <section class="info-section">
+            <div class="info-cards">
+                <div class="info-card">
+                    <i class="fas fa-database"></i>
+                    <h3>HDFS + Hadoop</h3>
+                    <p>Procesamiento distribuido de datos web</p>
+                </div>
+                <div class="info-card">
+                    <i class="fas fa-fire"></i>
+                    <h3>Apache Spark</h3>
+                    <p>Análisis rápido en memoria</p>
+                </div>
+                <div class="info-card">
+                    <i class="fas fa-table"></i>
+                    <h3>MariaDB</h3>
+                    <p>Almacenamiento de resultados</p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Modal para mensajes -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="closeModal">&times;</span>
+            <h3 id="modalTitle">Información</h3>
+            <div id="modalMessage"></div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; 2025 WebLoader - Bases de Datos II | Última actualización: <span id="lastUpdate">--</span></p>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
