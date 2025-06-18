@@ -10,6 +10,14 @@ from nltk import word_tokenize
 from nltk.util import ngrams
 from unidecode import unidecode
 from datetime import datetime, timedelta
+import subprocess
+import os
+
+container_name = "namenode"
+local_folder = "wiki_data"
+container_folder = "/wiki_data"
+hdfs_target_dir = "/user/root/wiki_data"
+
 
 stop_words = set(stopwords.words('spanish')) # Carga palabras vacías en español
 visited = set()
@@ -21,6 +29,13 @@ max_depth = 1 # Profundidad máxima del crawler
 # Crear directorio si no existe
 os.makedirs(output_dir, exist_ok=True)
 output_file_path = os.path.join(output_dir, "wiki_data.jsonl")
+
+def run_command(cmd):
+    try:
+        print(f"Running: {' '.join(cmd)}")
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error: {e}")
 
 # Limpiar texto y extrae palabras relevantes
 def clean_text(text):
@@ -94,6 +109,28 @@ def extract_edits_per_day(soup, url):
     except Exception:
         return 0
 
+
+def upload_to_hdfs():
+    if not os.path.exists(local_folder):
+        print(f"Folder '{local_folder}' not found.")
+        return
+
+    
+    print(f"Uploading file '{local_folder}'...")
+    run_command(["docker", "cp", local_folder, f"{container_name}:{container_folder}"])
+
+    print(f" Creating HDFS directory '{hdfs_target_dir}'...")
+    run_command(["docker", "exec", container_name, "hdfs", "dfs", "-mkdir", "-p", hdfs_target_dir])
+
+    print(f"Uploading files from container to HDFS...")
+    run_command(["docker", "exec", container_name, "hdfs", "dfs", "-put", "-f", "/wiki_data/wiki_data.jsonl", hdfs_target_dir])
+
+    print(f"Verifying files in HDFS:")
+    run_command([
+        "docker", "exec", container_name, "hdfs", "dfs", "-ls", hdfs_target_dir
+    ])
+
+
 # Func. principal del crawler
 def parse_page(url, depth):
     if url in visited or depth > max_depth or len(visited) >= max_pages:
@@ -146,6 +183,11 @@ def parse_page(url, depth):
             if len(visited) >= max_pages:
                 break
             parse_page(link, depth + 1)
+
+        # Subir datos a HDFS
+        if len(visited) >= max_pages:
+            print("Subiendo datos a HDFS...")
+            upload_to_hdfs()
 
     # Manejo de errores
     except Exception as e:
