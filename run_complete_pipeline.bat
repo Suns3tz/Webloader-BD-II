@@ -43,7 +43,8 @@ if errorlevel 1 (
 
 REM Esperar que Hadoop esté listo
 echo ⏳ Esperando que Hadoop esté listo...
-timeout /t 30 /nobreak >nul
+timeout /t 10 /nobreak >nul
+
 
 REM Iniciar Spark y MySQL
 echo ⚡ Iniciando Spark y MySQL...
@@ -56,7 +57,7 @@ if errorlevel 1 (
 
 REM Esperar que los servicios estén listos
 echo ⏳ Esperando que todos los servicios estén listos...
-timeout /t 45 /nobreak >nul
+timeout /t 10 /nobreak >nul
 
 REM Verificar que todos los contenedores están ejecutándose
 echo 🔍 Verificando estado de contenedores...
@@ -91,7 +92,7 @@ echo.
 echo 🗄️ Paso 1: Configuración completa de base de datos MySQL...
 
 echo ⏳ Esperando que MySQL esté completamente listo...
-timeout /t 20 /nobreak >nul
+timeout /t 10 /nobreak >nul
 
 REM Eliminar base de datos anterior si existe
 echo 🗑️ Eliminando base de datos anterior...
