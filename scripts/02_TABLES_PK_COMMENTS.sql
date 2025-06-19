@@ -90,6 +90,7 @@ CREATE TABLE Top3WordsPages (
 );
 
 -- Crear tabla PageXWord (si es necesaria para otras relaciones)
+
 CREATE TABLE PageXWord (
     id_pageXword INT AUTO_INCREMENT COMMENT 'Unique identifier of the relation.',
     id_page INT NOT NULL COMMENT 'Foreign key to Page table.',
