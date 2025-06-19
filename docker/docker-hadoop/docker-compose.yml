@@ -14,6 +14,8 @@ services:
       - CLUSTER_NAME=test
     env_file:
       - ./hadoop.env
+    networks:
+      - webloader-network  # Red compartida
 
   datanode:
     image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
@@ -25,6 +27,8 @@ services:
       SERVICE_PRECONDITION: "namenode:9870"
     env_file:
       - ./hadoop.env
+    networks:
+      - webloader-network  # Red compartida
   
   resourcemanager:
     image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
@@ -34,6 +38,8 @@ services:
       SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864"
     env_file:
       - ./hadoop.env
+    networks:
+      - webloader-network  # Red compartida
 
   nodemanager1:
     image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
@@ -43,6 +49,8 @@ services:
       SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864 resourcemanager:8088"
     env_file:
       - ./hadoop.env
+    networks:
+      - webloader-network  # Red compartida
   
   historyserver:
     image: bde2020/hadoop-historyserver:2.0.0-hadoop3.2.1-java8
@@ -54,8 +62,15 @@ services:
       - hadoop_historyserver:/hadoop/yarn/timeline
     env_file:
       - ./hadoop.env
+    networks:
+      - webloader-network  # Red compartida
   
 volumes:
   hadoop_namenode:
   hadoop_datanode:
   hadoop_historyserver:
+
+networks:
+  webloader-network:
+    driver: bridge
+    name: webloader-network  # Nombre fijo para la red

@@ -36,9 +36,6 @@
                             <option value="word_frequency">Frecuencia de Palabras</option>
                             <option value="word_pairs">Pares de Palabras</option>
                             <option value="word_triplets">Tripletas de Palabras</option>
-                            <option value="page_similarity">Similitud entre Páginas</option>
-                            <option value="link_analysis">Análisis de Enlaces</option>
-                            <option value="custom">Análisis Personalizado</option>
                         </select>
                     </div>
 
@@ -48,17 +45,20 @@
                             <i class="fas fa-sliders-h"></i> Configuración
                         </label>
                         <div class="config-options" id="configOptions">
-                            <!-- Las opciones aparecerán dinámicamente según el tipo seleccionado -->
+                            <p>Selecciona un tipo de análisis para ver las opciones</p>
                         </div>
                     </div>
 
                     <!-- Botones de Acción -->
                     <div class="action-buttons">
                         <button type="submit" class="btn btn-primary" id="startAnalysis">
-                            <i class="fas fa-play"></i> Iniciar Análisis
+                            <i class="fas fa-play"></i> Ejecutar Análisis
                         </button>
                         <button type="button" class="btn btn-secondary" id="resetForm">
                             <i class="fas fa-redo"></i> Reiniciar
+                        </button>
+                        <button type="button" class="btn btn-secondary" id="viewResults" onclick="app.loadResults()">
+                            <i class="fas fa-chart-bar"></i> Ver Resultados
                         </button>
                     </div>
                 </form>
@@ -73,11 +73,11 @@
             </div>
         </section>
 
-        <!-- Sección de Resultados (placeholder) -->
+        <!-- Sección de Resultados -->
         <section class="results-section" id="resultsSection" style="display: none;">
             <h2><i class="fas fa-chart-bar"></i> Resultados del Análisis</h2>
             <div class="results-content" id="resultsContent">
-                <!-- Los resultados aparecerán aquí cuando se implemente la lógica -->
+                <!-- Los resultados aparecerán aquí -->
             </div>
         </section>
 
@@ -96,7 +96,7 @@
                 </div>
                 <div class="info-card">
                     <i class="fas fa-table"></i>
-                    <h3>MariaDB</h3>
+                    <h3>MySQL</h3>
                     <p>Almacenamiento de resultados</p>
                 </div>
             </div>

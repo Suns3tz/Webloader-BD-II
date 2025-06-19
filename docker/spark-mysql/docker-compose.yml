@@ -15,7 +15,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     networks:
-      - app-network
+      - webloader-network  # Red compartida
 
   # Servicio Spark
   spark:
@@ -35,7 +35,7 @@ services:
     volumes:
       - ./spark-apps:/app
     networks:
-      - app-network
+      - webloader-network  # Red compartida
     healthcheck:
       test: ["CMD", "ls", "/opt/bitnami/spark/lib"]
       interval: 10s
@@ -46,5 +46,5 @@ volumes:
   mysql_data:
 
 networks:
-  app-network:
-    driver: bridge
+  webloader-network:
+    external: true  # Usar red externa creada por Hadoop
