@@ -27,6 +27,12 @@ class WebLoaderApp {
             resetBtn.addEventListener('click', () => this.resetForm());
         }
 
+        // Botón para ver resultados
+        const viewResultsBtn = document.getElementById('viewResults');
+        if (viewResultsBtn) {
+            viewResultsBtn.addEventListener('click', () => this.loadResults());
+        }
+
         // Modal
         const closeModal = document.getElementById('closeModal');
         if (closeModal) {
@@ -133,48 +139,22 @@ class WebLoaderApp {
         const configs = {
             'word_frequency': `
                 <div class="config-item">
-                    <label>Número mínimo de repeticiones:</label>
-                    <input type="number" name="min_frequency" value="2" min="1">
-                </div>
-                <div class="config-item">
-                    <label>Palabras a excluir (separadas por coma):</label>
-                    <input type="text" name="exclude_words" placeholder="el, la, de, que, y, ...">
+                    <label>Ejecutar análisis completo de frecuencia de palabras:</label>
+                    <p>Este análisis procesará todas las páginas web y calculará las frecuencias de palabras.</p>
                 </div>
             `,
             'word_pairs': `
                 <div class="config-item">
-                    <label>Número mínimo de repeticiones del par:</label>
-                    <input type="number" name="min_pair_frequency" value="2" min="1">
+                    <label>Ejecutar análisis completo de pares de palabras:</label>
+                    <p>Este análisis procesará todas las páginas web y calculará las frecuencias de pares de palabras.</p>
                 </div>
             `,
             'word_triplets': `
                 <div class="config-item">
-                    <label>Número mínimo de repeticiones del triplet:</label>
-                    <input type="number" name="min_triplet_frequency" value="2" min="1">
+                    <label>Ejecutar análisis completo de tripletas de palabras:</label>
+                    <p>Este análisis procesará todas las páginas web y calculará las frecuencias de tripletas de palabras.</p>
                 </div>
             `,
-            'page_similarity': `
-                <div class="config-item">
-                    <label>Umbral de similitud (0-1):</label>
-                    <input type="number" name="similarity_threshold" value="0.7" min="0" max="1" step="0.1">
-                </div>
-            `,
-            'link_analysis': `
-                <div class="config-item">
-                    <label>Tipo de enlaces a analizar:</label>
-                    <select name="link_type">
-                        <option value="all">Todos los enlaces</option>
-                        <option value="internal">Solo internos</option>
-                        <option value="external">Solo externos</option>
-                    </select>
-                </div>
-            `,
-            'custom': `
-                <div class="config-item">
-                    <label>Consulta personalizada Spark:</label>
-                    <textarea name="custom_query" placeholder="Escribe tu consulta aquí..." rows="4"></textarea>
-                </div>
-            `
         };
 
         return configs[type] || '<p>Configuración no disponible para este tipo de análisis</p>';
@@ -195,7 +175,7 @@ class WebLoaderApp {
         // Mostrar que el análisis está siendo procesado
         const submitBtn = document.getElementById('startAnalysis');
         const originalText = submitBtn.innerHTML;
-        submitBtn.innerHTML = '<span class="loading"></span> Procesando...';
+        submitBtn.innerHTML = '<span class="loading"></span> Ejecutando Spark...';
         submitBtn.disabled = true;
 
         try {
@@ -211,6 +191,8 @@ class WebLoaderApp {
 
             if (response.ok) {
                 this.showAnalysisResult(result);
+                // Cargar resultados después de 10 segundos
+                setTimeout(() => this.loadResults(), 10000);
             } else {
                 this.showModal('Error', result.error || 'Error al procesar el análisis');
             }
@@ -224,20 +206,133 @@ class WebLoaderApp {
         }
     }
 
+    async loadResults() {
+        try {
+            const resultsSection = document.getElementById('resultsSection');
+            const resultsContent = document.getElementById('resultsContent');
+            
+            resultsContent.innerHTML = '<div class="loading-container"><span class="loading"></span> Cargando resultados...</div>';
+            resultsSection.style.display = 'block';
+
+            // Cargar resumen
+            const summaryResponse = await fetch('/api/results/summary');
+            const summary = await summaryResponse.json();
+
+            // Cargar resultados de palabras
+            const wordsResponse = await fetch('/api/results/words?limit=10');
+            const words = await wordsResponse.json();
+
+            // Cargar resultados de pares
+            const pairsResponse = await fetch('/api/results/word-pairs?limit=10');
+            const pairs = await pairsResponse.json();
+
+            // Cargar resultados de tripletas
+            const tripletsResponse = await fetch('/api/results/word-triplets?limit=10');
+            const triplets = await tripletsResponse.json();
+
+            // Mostrar resultados
+            this.displayResults(summary, words, pairs, triplets);
+
+        } catch (error) {
+            console.error('Error loading results:', error);
+            this.showModal('Error', 'Error cargando resultados de la base de datos');
+        }
+    }
+
+    displayResults(summary, words, pairs, triplets) {
+        const resultsContent = document.getElementById('resultsContent');
+        
+        resultsContent.innerHTML = `
+            <div class="results-container">
+                <div class="results-summary">
+                    <h3>📊 Resumen del Análisis</h3>
+                    <div class="summary-grid">
+                        <div class="summary-item">
+                            <span class="summary-number">${summary.total_pages || 0}</span>
+                            <span class="summary-label">Páginas Analizadas</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-number">${summary.total_words || 0}</span>
+                            <span class="summary-label">Palabras Únicas</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-number">${summary.total_word_pairs || 0}</span>
+                            <span class="summary-label">Pares de Palabras</span>
+                        </div>
+                        <div class="summary-item">
+                            <span class="summary-number">${summary.total_word_triplets || 0}</span>
+                            <span class="summary-label">Tripletas de Palabras</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="results-tabs">
+                    <div class="tab-buttons">
+                        <button class="tab-btn active" onclick="showTab('words')">Palabras</button>
+                        <button class="tab-btn" onclick="showTab('pairs')">Pares</button>
+                        <button class="tab-btn" onclick="showTab('triplets')">Tripletas</button>
+                    </div>
+
+                    <div id="words-tab" class="tab-content active">
+                        <h4>🔤 Top Palabras por Página</h4>
+                        ${this.createResultsTable(words, ['word', 'page_title', 'quantity'], ['Palabra', 'Página', 'Frecuencia'])}
+                    </div>
+
+                    <div id="pairs-tab" class="tab-content">
+                        <h4>🔗 Top Pares de Palabras por Página</h4>
+                        ${this.createResultsTable(pairs, ['word_pair', 'page_title', 'repetition_count'], ['Par de Palabras', 'Página', 'Frecuencia'])}
+                    </div>
+
+                    <div id="triplets-tab" class="tab-content">
+                        <h4>🎯 Top Tripletas de Palabras por Página</h4>
+                        ${this.createResultsTable(triplets, ['word_triplet', 'page_title', 'repetition_count'], ['Tripleta de Palabras', 'Página', 'Frecuencia'])}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    createResultsTable(data, columns, headers) {
+        if (!data || data.length === 0) {
+            return '<p>No hay datos disponibles</p>';
+        }
+
+        const tableRows = data.map(row => {
+            const cells = columns.map(col => `<td>${row[col] || 'N/A'}</td>`).join('');
+            return `<tr>${cells}</tr>`;
+        }).join('');
+
+        const headerCells = headers.map(h => `<th>${h}</th>`).join('');
+
+        return `
+            <table class="results-table">
+                <thead>
+                    <tr>${headerCells}</tr>
+                </thead>
+                <tbody>
+                    ${tableRows}
+                </tbody>
+            </table>
+        `;
+    }
+
     showAnalysisResult(result) {
         const resultsSection = document.getElementById('resultsSection');
         const resultsContent = document.getElementById('resultsContent');
         
         resultsContent.innerHTML = `
             <div class="analysis-result">
-                <h3>✅ Análisis Enviado Correctamente</h3>
-                <p><strong>ID de Análisis:</strong> ${result.analysis_id}</p>
+                <h3>✅ Análisis de Spark Iniciado</h3>
+                <p><strong>ID de Proceso:</strong> ${result.process_id}</p>
                 <p><strong>Estado:</strong> ${result.status}</p>
                 <p><strong>Mensaje:</strong> ${result.message}</p>
                 <div class="result-note">
                     <i class="fas fa-info-circle"></i>
-                    <span>El análisis se está procesando en segundo plano. Los resultados se almacenarán en MariaDB una vez completado.</span>
+                    <span>El análisis se está procesando con Spark. Los resultados se almacenarán en MySQL automáticamente.</span>
                 </div>
+                <button class="btn btn-primary" onclick="app.loadResults()" style="margin-top: 15px;">
+                    <i class="fas fa-refresh"></i> Ver Resultados
+                </button>
             </div>
         `;
         
@@ -292,12 +387,34 @@ class WebLoaderApp {
     }
 }
 
+// Función global para cambiar tabs
+function showTab(tabName) {
+    // Ocultar todas las pestañas
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Quitar clase active de todos los botones
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Mostrar la pestaña seleccionada
+    document.getElementById(`${tabName}-tab`).classList.add('active');
+    
+    // Activar el botón correspondiente
+    event.target.classList.add('active');
+}
+
+// Variable global para acceso desde HTML
+let app;
+
 // Inicializar la aplicación cuando se carga la página
 document.addEventListener('DOMContentLoaded', () => {
-    new WebLoaderApp();
+    app = new WebLoaderApp();
 });
 
-// Estilos para elementos de configuración
+// Estilos adicionales para las nuevas funcionalidades
 const additionalCSS = `
     .config-item {
         margin-bottom: 15px;
@@ -320,11 +437,6 @@ const additionalCSS = `
         font-size: 0.9rem;
     }
     
-    .config-item textarea {
-        resize: vertical;
-        font-family: 'Courier New', monospace;
-    }
-    
     .analysis-result {
         text-align: center;
         padding: 20px;
@@ -335,25 +447,108 @@ const additionalCSS = `
         margin-bottom: 15px;
     }
     
-    .analysis-result p {
-        margin-bottom: 10px;
+    .results-container {
+        max-width: 100%;
     }
     
-    .result-note {
-        margin-top: 20px;
-        padding: 15px;
-        background: #e3f2fd;
+    .results-summary {
+        margin-bottom: 30px;
+        padding: 20px;
+        background: #f8f9fa;
         border-radius: 8px;
-        border-left: 4px solid var(--primary-color);
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        text-align: left;
     }
     
-    .result-note i {
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 20px;
+        margin-top: 15px;
+    }
+    
+    .summary-item {
+        text-align: center;
+        padding: 15px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .summary-number {
+        display: block;
+        font-size: 2rem;
+        font-weight: bold;
         color: var(--primary-color);
-        font-size: 1.2rem;
+    }
+    
+    .summary-label {
+        font-size: 0.9rem;
+        color: #666;
+    }
+    
+    .results-tabs {
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .tab-buttons {
+        display: flex;
+        background: #f8f9fa;
+        border-bottom: 1px solid #ddd;
+    }
+    
+    .tab-btn {
+        flex: 1;
+        padding: 15px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        font-weight: 500;
+        transition: background 0.3s;
+    }
+    
+    .tab-btn.active {
+        background: white;
+        color: var(--primary-color);
+        border-bottom: 2px solid var(--primary-color);
+    }
+    
+    .tab-content {
+        display: none;
+        padding: 20px;
+    }
+    
+    .tab-content.active {
+        display: block;
+    }
+    
+    .results-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+    }
+    
+    .results-table th,
+    .results-table td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+    }
+    
+    .results-table th {
+        background: #f8f9fa;
+        font-weight: 600;
+        color: var(--dark-color);
+    }
+    
+    .results-table tr:hover {
+        background: #f8f9fa;
+    }
+    
+    .loading-container {
+        text-align: center;
+        padding: 40px;
     }
 `;
 
