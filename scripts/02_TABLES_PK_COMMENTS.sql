@@ -1,5 +1,6 @@
 USE proyecto02;
 
+-- Table that stores a word and its total of repetitions
 CREATE TABLE Word (
     id_word INT AUTO_INCREMENT COMMENT 'Unique identifier of the word.',
     word VARCHAR(255) NOT NULL COMMENT 'Name of the word.',
@@ -7,6 +8,7 @@ CREATE TABLE Word (
     PRIMARY KEY (id_word)
 );
 
+-- Table that stores the page and information about it
 CREATE TABLE Page (
     id_page INT AUTO_INCREMENT COMMENT 'Unique identifier of the page.',
     title VARCHAR(255) NOT NULL COMMENT 'Name of the page.',
@@ -19,6 +21,7 @@ CREATE TABLE Page (
     PRIMARY KEY (id_page)
 );
 
+-- Table that stores the pages with more repetitions of an especific word
 CREATE TABLE TopWordPages (
     id_top INT AUTO_INCREMENT COMMENT 'Unique identifier of the relation.',
     id_word INT NOT NULL COMMENT 'Foreign key as identifier of the word.',
@@ -29,6 +32,7 @@ CREATE TABLE TopWordPages (
     PRIMARY KEY (id_top)
 );
 
+-- Table that stores a set o two words
 CREATE TABLE SetWords2 (
     id_set2 INT AUTO_INCREMENT COMMENT 'Unique identifier of the set of 2 words.',
     word1 VARCHAR(255) NOT NULL COMMENT 'Name of the first word.',
@@ -37,6 +41,7 @@ CREATE TABLE SetWords2 (
     PRIMARY KEY (id_set2)
 );
 
+-- Table that stores the pages with more repetitions of an especific set of two
 CREATE TABLE Top2WordsPages (
     id_top2 INT AUTO_INCREMENT COMMENT 'Unique identifier of the relation.',
     id_set2 INT NOT NULL COMMENT 'Foreign key as identifier of the set of 2 words.',
@@ -47,6 +52,7 @@ CREATE TABLE Top2WordsPages (
     PRIMARY KEY (id_top2)
 );
 
+-- Table that stores a set o three words
 CREATE TABLE SetWords3 (
     id_set3 INT AUTO_INCREMENT COMMENT 'Unique identifier of the set of 3 words.',
     word1 VARCHAR(255) NOT NULL COMMENT 'Name of the first word.',
@@ -56,6 +62,7 @@ CREATE TABLE SetWords3 (
     PRIMARY KEY (id_set3)
 );
 
+-- Table that stores the pages with more repetitions of an especific set of three
 CREATE TABLE Top3WordsPages (
     id_top3 INT AUTO_INCREMENT COMMENT 'Unique identifier of the relation.',
     id_set3 INT NOT NULL COMMENT 'Foreign key as identifier of the set of 3 words.',
@@ -66,6 +73,7 @@ CREATE TABLE Top3WordsPages (
     PRIMARY KEY (id_top3)
 );
 
+-- Table that stores the relation of an especific word and an especific page
 CREATE TABLE PageXWord (
     id_pageXword INT AUTO_INCREMENT COMMENT 'Unique identifier of the relation.',
     id_page INT NOT NULL COMMENT 'Foreign key as identifier of the page.',
@@ -77,6 +85,7 @@ CREATE TABLE PageXWord (
     PRIMARY KEY (id_pageXword)
 );
 
+-- Table that stores the pages with more sets of two shared with an especific page
 CREATE TABLE Sets2PageXPage (
     id_sets2_pxp INT AUTO_INCREMENT COMMENT 'Unique identifier of the relation.',
     id_page1 INT NOT NULL COMMENT 'Foreign key as identifier of the first page.',
@@ -85,6 +94,7 @@ CREATE TABLE Sets2PageXPage (
     PRIMARY KEY (id_sets2_pxp)
 );
 
+-- Table that stores the pages with more sets of three shared with an especific page
 CREATE TABLE Sets3PageXPage (
     id_sets3_pxp INT AUTO_INCREMENT COMMENT 'Unique identifier of the relation.',
     id_page1 INT NOT NULL COMMENT 'Foreign key as identifier of the first page.',
@@ -92,3 +102,4 @@ CREATE TABLE Sets3PageXPage (
     shared_sets_count INT NOT NULL COMMENT 'Quantity of sets shared',
     PRIMARY KEY (id_sets3_pxp)
 );
+
