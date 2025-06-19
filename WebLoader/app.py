@@ -126,39 +126,6 @@ def submit_analysis():
     except Exception as e:
         return jsonify({'error': f'Error ejecutando análisis: {str(e)}'}), 500
 
-@app.route('/api/results/words')
-def get_word_results():
-    """Obtener resultados del análisis de palabras"""
-    limit = request.args.get('limit', 20, type=int)
-    results = analysis_api.get_top_words_per_page(limit)
-    
-    if results is None:
-        return jsonify({'error': 'Error obteniendo resultados'}), 500
-    
-    return jsonify(results)
-
-@app.route('/api/results/word-pairs')
-def get_word_pairs_results():
-    """Obtener resultados del análisis de pares de palabras"""
-    limit = request.args.get('limit', 20, type=int)
-    results = analysis_api.get_top_word_pairs_per_page(limit)
-    
-    if results is None:
-        return jsonify({'error': 'Error obteniendo resultados'}), 500
-    
-    return jsonify(results)
-
-@app.route('/api/results/word-triplets')
-def get_word_triplets_results():
-    """Obtener resultados del análisis de tripletas de palabras"""
-    limit = request.args.get('limit', 20, type=int)
-    results = analysis_api.get_top_word_triplets_per_page(limit)
-    
-    if results is None:
-        return jsonify({'error': 'Error obteniendo resultados'}), 500
-    
-    return jsonify(results)
-
 @app.route('/api/results/summary')
 def get_analysis_summary():
     """Obtener resumen del análisis"""
@@ -195,6 +162,154 @@ def test_database():
             'status': 'error', 
             'message': f'Error probando base de datos: {str(e)}'
         }), 500
+
+# Nuevas rutas usando Stored Procedures
+
+@app.route('/api/analysis/word/<word>')
+def get_pages_by_word(word):
+    """Obtener páginas que más copias de una palabra tienen"""
+    results = analysis_api.get_top_pages_by_word(word)
+    
+    if isinstance(results, dict) and 'error' in results:
+        return jsonify(results), 500
+    
+    return jsonify({'success': True, 'data': results})
+
+@app.route('/api/analysis/word-set2/<word1>/<word2>')
+def get_pages_by_word_set2(word1, word2):
+    """Obtener páginas que más copias de un set de 2 palabras tienen"""
+    results = analysis_api.get_top_pages_by_word_set2(word1, word2)
+    
+    if isinstance(results, dict) and 'error' in results:
+        return jsonify(results), 500
+    
+    return jsonify({'success': True, 'data': results})
+
+@app.route('/api/analysis/word-set3/<word1>/<word2>/<word3>')
+def get_pages_by_word_set3(word1, word2, word3):
+    """Obtener páginas que más copias de un set de 3 palabras tienen"""
+    results = analysis_api.get_top_pages_by_word_set3(word1, word2, word3)
+    
+    if isinstance(results, dict) and 'error' in results:
+        return jsonify(results), 500
+    
+    return jsonify({'success': True, 'data': results})
+
+@app.route('/api/analysis/shared-bigrams')
+def get_shared_bigrams():
+    """Obtener páginas con más sets de 2 palabras coincidentes con una página dada"""
+    url = request.args.get('url')
+    if not url:
+        return jsonify({'error': 'Parámetro URL requerido'}), 400
+    
+    results = analysis_api.get_shared_bigrams_by_page(url)
+    
+    if isinstance(results, dict) and 'error' in results:
+        return jsonify(results), 500
+    
+    return jsonify({'success': True, 'data': results})
+
+@app.route('/api/analysis/shared-trigrams')
+def get_shared_trigrams():
+    """Obtener páginas con más sets de 3 palabras coincidentes con una página dada"""
+    url = request.args.get('url')
+    if not url:
+        return jsonify({'error': 'Parámetro URL requerido'}), 400
+    
+    results = analysis_api.get_shared_trigrams_by_page(url)
+    
+    if isinstance(results, dict) and 'error' in results:
+        return jsonify(results), 500
+    
+    return jsonify({'success': True, 'data': results})
+
+@app.route('/api/analysis/page-words')
+def get_page_words():
+    """Obtener el set de palabras distintas de una página y su cantidad"""
+    url = request.args.get('url')
+    if not url:
+        return jsonify({'error': 'Parámetro URL requerido'}), 400
+    
+    results = analysis_api.get_different_words_by_page(url)
+    
+    if isinstance(results, dict) and 'error' in results:
+        return jsonify(results), 500
+    
+    return jsonify({'success': True, 'data': results})
+
+@app.route('/api/analysis/page-links')
+def get_page_links():
+    """Obtener la cantidad de links distintos que aparecen en una página"""
+    url = request.args.get('url')
+    if not url:
+        return jsonify({'error': 'Parámetro URL requerido'}), 400
+    
+    results = analysis_api.get_link_count_by_page(url)
+    
+    if isinstance(results, dict) and 'error' in results:
+        return jsonify(results), 500
+    
+    return jsonify({'success': True, 'data': results})
+
+@app.route('/api/analysis/page-word-percentages')
+def get_page_word_percentages():
+    """Obtener el porcentaje que representa cada palabra en el texto total de la página"""
+    url = request.args.get('url')
+    if not url:
+        return jsonify({'error': 'Parámetro URL requerido'}), 400
+    
+    results = analysis_api.get_percentage_words_by_page(url)
+    
+    if isinstance(results, dict) and 'error' in results:
+        return jsonify(results), 500
+    
+    return jsonify({'success': True, 'data': results})
+
+@app.route('/api/analysis/word-repetitions/<word>')
+def get_word_repetitions(word):
+    """Obtener la cantidad total de repeticiones de una palabra"""
+    results = analysis_api.get_total_repetitions_by_word(word)
+    
+    if isinstance(results, dict) and 'error' in results:
+        return jsonify(results), 500
+    
+    return jsonify({'success': True, 'data': results})
+
+@app.route('/api/analysis/page-repetitions')
+def get_page_repetitions():
+    """Obtener la cantidad total de repeticiones de una página"""
+    url = request.args.get('url')
+    if not url:
+        return jsonify({'error': 'Parámetro URL requerido'}), 400
+    
+    results = analysis_api.get_total_repetitions_by_page(url)
+    
+    if isinstance(results, dict) and 'error' in results:
+        return jsonify(results), 500
+    
+    return jsonify({'success': True, 'data': results})
+
+@app.route('/api/helper/pages')
+def get_available_pages():
+    """Obtener lista de páginas disponibles para facilitar las pruebas"""
+    limit = request.args.get('limit', 50, type=int)
+    results = analysis_api.get_available_pages(limit)
+    
+    if isinstance(results, dict) and 'error' in results:
+        return jsonify(results), 500
+    
+    return jsonify({'success': True, 'data': results})
+
+@app.route('/api/helper/words')
+def get_available_words():
+    """Obtener lista de palabras disponibles para facilitar las pruebas"""
+    limit = request.args.get('limit', 100, type=int)
+    results = analysis_api.get_available_words(limit)
+    
+    if isinstance(results, dict) and 'error' in results:
+        return jsonify(results), 500
+    
+    return jsonify({'success': True, 'data': results})
 
 if __name__ == '__main__':
     print("📍 Servidor disponible en: http://localhost:5000")
