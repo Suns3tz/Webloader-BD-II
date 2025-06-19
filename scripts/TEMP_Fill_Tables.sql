@@ -51,7 +51,7 @@ VALUES
 (2, 2, 12);
 
 -- Coincidencias entre páginas
-INSERT INTO Sets2PageXPage (id_page1, id_page2, shared_sets_count)
+INSERT INTO Sets2PageXPage (id_page1, id_page2,shared_sets_count)
 VALUES (1, 2, 3);
 
 INSERT INTO Sets3PageXPage (id_page1, id_page2, shared_sets_count)
