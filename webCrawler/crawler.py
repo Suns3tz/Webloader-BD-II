@@ -23,8 +23,8 @@ stop_words = set(stopwords.words('spanish')) # Carga palabras vacías en españo
 visited = set()
 base_url = "https://es.wikipedia.org"
 output_dir = "wiki_data" # Directorio de salida
-max_pages = 5 # Maximo de paginas a visitar
-max_depth = 1 # Profundidad máxima del crawler
+max_pages = 15000 # Maximo de paginas a visitar
+max_depth = 5 # Profundidad máxima del crawler
 
 # Crear directorio si no existe
 os.makedirs(output_dir, exist_ok=True)
