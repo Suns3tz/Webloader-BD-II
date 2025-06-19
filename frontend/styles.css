@@ -1,0 +1,10 @@
+body {
+    background-color: #dddddd;
+}
+
+link:hover, .link:focus {
+    background-color: #343a40 !important;
+    color: #ffc107 !important;
+    border-radius: .25rem;
+    transition: background-color 0.2s, color 0.2s;
+}

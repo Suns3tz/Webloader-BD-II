@@ -17,53 +17,67 @@
                 <i class="fas fa-docker"></i>
                 <span id="dockerStatusText">Verificando Docker...</span>
             </div>
-        </header>
-
-        <!-- Sección Principal de Análisis -->
+        </header>        <!-- Sección Principal de Consultas -->
         <section class="main-section">
             <div class="analysis-card">
-                <h2><i class="fas fa-chart-line"></i> Configurar Análisis</h2>
+                <h2><i class="fas fa-database"></i> Configuración de Consulta</h2>
                 
-                <!-- Formulario de Análisis -->
-                <form id="analysisForm" class="analysis-form">
-                    <!-- Tipo de Análisis -->
+                <!-- Botones de ayuda -->
+                <div class="helper-buttons">
+                    <button onclick="app.showAvailablePages()" class="btn btn-secondary">
+                        <i class="fas fa-list"></i> Ver Páginas Disponibles
+                    </button>
+                    <button onclick="app.showAvailableWords()" class="btn btn-secondary">
+                        <i class="fas fa-spell-check"></i> Ver Palabras Populares
+                    </button>
+                </div>
+                
+                <!-- Formulario de Consulta -->
+                <form id="queryForm" class="analysis-form">
+                    <!-- Tipo de Consulta -->
                     <div class="form-group">
-                        <label for="analysisType">
-                            <i class="fas fa-cogs"></i> Tipo de Análisis
+                        <label for="queryType">
+                            <i class="fas fa-search"></i> Tipo de Consulta
                         </label>
-                        <select id="analysisType" name="analysis_type" required>
-                            <option value="">Selecciona un tipo de análisis</option>
-                            <option value="word_frequency">Frecuencia de Palabras</option>
-                            <option value="word_pairs">Pares de Palabras</option>
-                            <option value="word_triplets">Tripletas de Palabras</option>
+                        <select id="queryType" name="query_type" required>
+                            <option value="">Selecciona un tipo de consulta</option>
+                            <option value="word_search">Páginas por palabra específica</option>
+                            <option value="word_set2">Páginas por par de palabras</option>
+                            <option value="word_set3">Páginas por tripleta de palabras</option>
+                            <option value="shared_bigrams">Páginas con bigramas compartidos</option>
+                            <option value="shared_trigrams">Páginas con trigramas compartidos</option>
+                            <option value="page_words">Palabras distintas de una página</option>
+                            <option value="page_links">Conteo de links de una página</option>
+                            <option value="page_percentages">Porcentajes de palabras en página</option>
+                            <option value="word_repetitions">Total repeticiones de palabra</option>
+                            <option value="page_repetitions">Total repeticiones de página</option>
                         </select>
                     </div>
 
-                    <!-- Configuración de Análisis -->
+                    <!-- Configuración de Consulta -->
                     <div class="form-group">
-                        <label for="analysisConfig">
-                            <i class="fas fa-sliders-h"></i> Configuración
+                        <label for="queryConfig">
+                            <i class="fas fa-sliders-h"></i> Parámetros de Consulta
                         </label>
-                        <div class="config-options" id="configOptions">
-                            <p>Selecciona un tipo de análisis para ver las opciones</p>
+                        <div class="config-options" id="queryConfigOptions">
+                            <p>Selecciona un tipo de consulta para ver los parámetros</p>
                         </div>
                     </div>
 
                     <!-- Botones de Acción -->
                     <div class="action-buttons">
-                        <button type="submit" class="btn btn-primary" id="startAnalysis">
-                            <i class="fas fa-play"></i> Ejecutar Análisis
+                        <button type="submit" class="btn btn-primary" id="executeQuery">
+                            <i class="fas fa-play"></i> Ejecutar Consulta
                         </button>
-                        <button type="button" class="btn btn-secondary" id="resetForm">
-                            <i class="fas fa-redo"></i> Reiniciar
+                        <button type="button" class="btn btn-secondary" id="resetQueryForm">
+                            <i class="fas fa-redo"></i> Limpiar
                         </button>
-                        <button type="button" class="btn btn-secondary" id="viewResults" onclick="app.loadResults()">
-                            <i class="fas fa-chart-bar"></i> Ver Resultados
+                        <button type="button" class="btn btn-secondary" id="viewSummary" onclick="app.loadResults()">
+                            <i class="fas fa-chart-bar"></i> Ver Resumen
                         </button>
                     </div>
                 </form>
-            </div>
-        </section>
+            </div>        </section>
 
         <!-- Estado de Servicios -->
         <section class="services-section">
@@ -75,13 +89,11 @@
 
         <!-- Sección de Resultados -->
         <section class="results-section" id="resultsSection" style="display: none;">
-            <h2><i class="fas fa-chart-bar"></i> Resultados del Análisis</h2>
+            <h2><i class="fas fa-chart-bar"></i> Resultados de la Consulta</h2>
             <div class="results-content" id="resultsContent">
                 <!-- Los resultados aparecerán aquí -->
             </div>
-        </section>
-
-        <!-- Información del Sistema -->
+        </section>        <!-- Información del Sistema -->
         <section class="info-section">
             <div class="info-cards">
                 <div class="info-card">
