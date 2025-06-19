@@ -17,6 +17,11 @@ except ImportError as e:
 
 from datetime import datetime
 import json
+import subprocess
+import os
+
+# Importar API de análisis
+from analysis_api import AnalysisAPI
 
 app = Flask(__name__)
 
@@ -65,9 +70,10 @@ class DockerService:
         
         return status
 
-# Instancia global del servicio Docker
-print("🐳 Inicializando servicio Docker...")
+# Instancias globales
+print("🐳 Inicializando servicios...")
 docker_service = DockerService()
+analysis_api = AnalysisAPI()
 
 @app.route('/')
 def index():
@@ -84,29 +90,126 @@ def docker_status():
 
 @app.route('/api/analysis/submit', methods=['POST'])
 def submit_analysis():
-    """API endpoint para enviar análisis (placeholder para implementación futura)"""
+    """API endpoint para ejecutar análisis de Spark"""
     data = request.get_json()
     
     # Validación básica
     if not data or 'analysis_type' not in data:
         return jsonify({'error': 'Tipo de análisis requerido'}), 400
     
-    # Placeholder para la lógica futura
-    return jsonify({
-        'message': 'Análisis enviado correctamente',
-        'analysis_id': f"analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-        'status': 'pending',
-        'data_received': data
-    })
+    try:
+        # Obtener el directorio padre de WebLoader
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        parent_dir = os.path.dirname(current_dir)
+        
+        # Ejecutar análisis de Spark
+        if os.name == 'nt':  # Windows
+            script_path = os.path.join(parent_dir, 'scripts', 'run_spark_analysis.bat')
+        else:  # Linux/Mac
+            script_path = os.path.join(parent_dir, 'scripts', 'run_spark_analysis.sh')
+        
+        # Verificar que el script existe
+        if not os.path.exists(script_path):
+            return jsonify({'error': f'Script no encontrado: {script_path}'}), 500
+        
+        # Ejecutar script en segundo plano desde el directorio padre
+        process = subprocess.Popen([script_path], shell=True, cwd=parent_dir)
+        
+        return jsonify({
+            'message': 'Análisis de Spark iniciado correctamente',
+            'analysis_id': f"spark_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            'status': 'running',
+            'process_id': process.pid,
+            'script_path': script_path
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error ejecutando análisis: {str(e)}'}), 500
+
+@app.route('/api/results/words')
+def get_word_results():
+    """Obtener resultados del análisis de palabras"""
+    limit = request.args.get('limit', 20, type=int)
+    results = analysis_api.get_top_words_per_page(limit)
+    
+    if results is None:
+        return jsonify({'error': 'Error obteniendo resultados'}), 500
+    
+    return jsonify(results)
+
+@app.route('/api/results/word-pairs')
+def get_word_pairs_results():
+    """Obtener resultados del análisis de pares de palabras"""
+    limit = request.args.get('limit', 20, type=int)
+    results = analysis_api.get_top_word_pairs_per_page(limit)
+    
+    if results is None:
+        return jsonify({'error': 'Error obteniendo resultados'}), 500
+    
+    return jsonify(results)
+
+@app.route('/api/results/word-triplets')
+def get_word_triplets_results():
+    """Obtener resultados del análisis de tripletas de palabras"""
+    limit = request.args.get('limit', 20, type=int)
+    results = analysis_api.get_top_word_triplets_per_page(limit)
+    
+    if results is None:
+        return jsonify({'error': 'Error obteniendo resultados'}), 500
+    
+    return jsonify(results)
+
+@app.route('/api/results/summary')
+def get_analysis_summary():
+    """Obtener resumen del análisis"""
+    summary = analysis_api.get_analysis_summary()
+    
+    if summary is None:
+        return jsonify({'error': 'Error obteniendo resultados. Verifica que el análisis de Spark se haya ejecutado correctamente.'}), 500
+    
+    return jsonify(summary)
 
 @app.route('/api/test')
 def test():
     """Endpoint de prueba"""
     return jsonify({'status': 'ok', 'message': 'WebLoader API funcionando correctamente'})
 
+@app.route('/api/database/test')
+def test_database():
+    """Endpoint para probar conexión a base de datos"""
+    try:
+        summary = analysis_api.get_analysis_summary()
+        if summary is not None:
+            return jsonify({
+                'status': 'success', 
+                'message': 'Conexión a MySQL exitosa',
+                'data': summary
+            })
+        else:
+            return jsonify({
+                'status': 'error', 
+                'message': 'No se pudo conectar a MySQL o no hay datos'
+            }), 500
+    except Exception as e:
+        return jsonify({
+            'status': 'error', 
+            'message': f'Error probando base de datos: {str(e)}'
+        }), 500
+
 if __name__ == '__main__':
     print("📍 Servidor disponible en: http://localhost:5000")
     print("🐳 Estado Docker:", "✅ Conectado" if docker_service.is_available else "❌ No disponible")
+    print("💾 Probando conexión a MySQL...")
+    
+    # Probar conexión a base de datos al inicio
+    test_summary = analysis_api.get_analysis_summary()
+    if test_summary is not None:
+        print("✅ Conexión a MySQL exitosa")
+        print(f"📊 Datos disponibles: {test_summary}")
+    else:
+        print("⚠️ No se pudo conectar a MySQL o no hay datos disponibles")
+        print("💡 Ejecuta el análisis de Spark primero")
+    
     print("⏹️ Presiona Ctrl+C para detener")
     print("-" * 50)
     
