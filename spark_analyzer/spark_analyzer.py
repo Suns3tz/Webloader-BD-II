@@ -1,6 +1,10 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
+
+from pyspark.sql.window import Window
+
+
 import json
 import sys
 import logging
@@ -19,7 +23,13 @@ class WikiDataAnalyzer:
             'password': 'pr',
             'database': 'proyecto02'
         }
-        
+        self.mysql_url = f"jdbc:mysql://{self.mysql_config['host']}:{self.mysql_config['port']}/{self.mysql_config['database']}"
+        self.mysql_properties = {
+            "user": self.mysql_config['user'],
+            "password": self.mysql_config['password'],
+            "driver": "com.mysql.cj.jdbc.Driver"
+        }
+
     def init_spark(self):
         """Inicializar sesión de Spark"""
         try:
@@ -479,11 +489,145 @@ class WikiDataAnalyzer:
             logger.error(f"❌ Error en análisis de trigramas: {e}")
             return False
     
+
+    def analyze_TOP10Pages_by_shared_bigrams(self, df):
+
+        try:
+            logger.info("🔍 Analizando páginas TOP10 por bigramas compartidos...")
+            # Aquí iría la lógica para analizar las páginas TOP10 por bigramas compartidos
+            
+            # Explota los bigramas y los convierte a string
+            df_exploded = df.select("url", explode(col("bigrams")).alias("bigram_str"))
+
+            # Relaciona páginas que comparten bigramas
+            joined = df_exploded.alias("a").join(
+                df_exploded.alias("b"),
+                (col("a.bigram_str") == col("b.bigram_str")) & (col("a.url") != col("b.url"))
+            ).select(
+                col("a.url").alias("page1_url"),
+                col("b.url").alias("page2_url"),
+                col("a.bigram_str")
+            ).distinct()
+
+            # Cuenta cuántos bigramas comparten cada par de páginas
+            shared_counts = joined.groupBy("page1_url", "page2_url").agg(count("bigram_str").alias("shared_sets_count"))
+
+            # Top 10 de páginas que más bigramas comparten con cada página
+            window = Window.partitionBy("page1_url").orderBy(desc("shared_sets_count"))
+            top10 = shared_counts.withColumn("rank", row_number().over(window)).filter(col("rank") <= 10)
+
+            page_df = self.spark.read.jdbc(url=self.mysql_url, table="Page", properties=self.mysql_properties).select("id_page", "url")
+
+            top10_ids = top10 \
+                .join(page_df.withColumnRenamed("id_page", "id_page1").withColumnRenamed("url", "page1_url"), on="page1_url") \
+                .join(page_df.withColumnRenamed("id_page", "id_page2").withColumnRenamed("url", "page2_url"), on="page2_url") \
+                .select("id_page1", "id_page2", "shared_sets_count") \
+
+            if not self.save_to_mysql(top10_ids, "Sets2PageXPage", mode="append"):
+                return False
+            
+            return True
+        
+        except Exception as e:
+            logger.error(f"❌ Error en análisis de páginas TOP10 por bigramas compartidos: {e}")
+            return False
+            
+        
+        
+    def analyze_TOP10Pages_by_shared_trigrams(self, df):
+
+        try:
+            logger.info("🔍 Analizando páginas TOP10 por trigramas compartidos...")
+
+            # Explota los trigramas y los convierte a string
+            df_exploded = df.select("url", explode(col("trigrams")).alias("trigram_str"))
+
+            # Relaciona páginas que comparten trigramas
+            joined = df_exploded.alias("a").join(
+                df_exploded.alias("b"),
+                (col("a.trigram_str") == col("b.trigram_str")) & (col("a.url") != col("b.url"))
+            ).select(
+                col("a.url").alias("page1_url"),
+                col("b.url").alias("page2_url"),
+                col("a.trigram_str")
+            ).distinct()
+
+            # Cuenta cuántos trigramas comparten cada par de páginas
+            shared_counts = joined.groupBy("page1_url", "page2_url").agg(count("trigram_str").alias("shared_sets_count"))
+
+            # Top 10 de páginas que más trigramas comparten con cada página
+            window = Window.partitionBy("page1_url").orderBy(desc("shared_sets_count"))
+            top10 = shared_counts.withColumn("rank", row_number().over(window)).filter(col("rank") <= 10)
+
+            page_df = self.spark.read.jdbc(url=self.mysql_url, table="Page", properties=self.mysql_properties).select("id_page", "url")
+
+            top10_ids = top10 \
+                .join(page_df.withColumnRenamed("id_page", "id_page1").withColumnRenamed("url", "page1_url"), on="page1_url") \
+                .join(page_df.withColumnRenamed("id_page", "id_page2").withColumnRenamed("url", "page2_url"), on="page2_url") \
+                .select("id_page1", "id_page2", "shared_sets_count") \
+
+            if not self.save_to_mysql(top10_ids, "Sets3PageXPage", mode="append"):
+                return False
+            
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Error en análisis de páginas TOP10 por trigramas compartidos: {e}")
+            return False
+
+
+
+    def ForEach_Page_Words(self, df):
+        """Realiza un análisis de palabras para cada página"""
+        try:
+            logger.info("🔍 Analizando palabras por página...")
+            
+            # Explota la lista de palabras
+            exploded = df.select(col("url"), explode(col("word_list")).alias("word"))
+
+            # Cuenta palabras por página
+            word_counts = exploded.groupBy("url", "word").agg(count("*").alias("quantity"))
+
+            # Cuenta total de palabras por página
+            total_counts = exploded.groupBy("url").agg(count("*").alias("total_words"))
+
+            # Une ambos DataFrames
+            joined = word_counts.join(total_counts, on="url")
+
+            # Calcula el porcentaje
+            result = joined.withColumn(
+                "percentage",
+                (col("quantity") / col("total_words")) * 100
+            )
+
+            # Carga los IDs de página y palabra desde MySQL
+            page_df = self.spark.read.jdbc(
+                url=self.mysql_url, table="Page", properties=self.mysql_properties
+            ).select("id_page", "url")
+            word_df = self.spark.read.jdbc(
+                url=self.mysql_url, table="Word", properties=self.mysql_properties
+            ).select("id_word", "word")
+
+            # Une para obtener los IDs
+            result = result.join(page_df, on="url") \
+                        .join(word_df, on="word") \
+                        .select("id_page", "id_word", "percentage", "quantity")
+
+            # Guarda la relación PageXWord
+            if not self.save_to_mysql(result, "PageXWord", mode="append"):
+                return False
+            logger.info("✅ Análisis de palabras por página completado")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Error en análisis de palabras por página: {e}")
+            return False
+
     def verify_hdfs_connection(self):
         """Verificar conexión a HDFS"""
         try:
             logger.info("🔍 Verificando conexión a HDFS...")
-            
+            # Aquí iría la lógica para verificar la conexión a HDFS
+
             # Intentar listar el directorio HDFS
             test_df = self.spark.read.text("hdfs://namenode:9000/")
             logger.info("✅ Conexión a HDFS exitosa")
@@ -544,6 +688,23 @@ class WikiDataAnalyzer:
             if not self.analyze_trigrams(df):
                 logger.error("❌ Falló el análisis de trigramas")
                 return False
+            
+            # 5. Analizar TOP10 páginas por bigramas compartidos
+            if not self.analyze_TOP10Pages_by_shared_bigrams(df):
+                logger.error("❌ Falló el análisis de TOP10 páginas por bigramas compartidos")
+                return False    
+            
+            # 6. Analizar TOP10 páginas por trigramas compartidos
+            if not self.analyze_TOP10Pages_by_shared_trigrams(df):
+                logger.error("❌ Falló el análisis de TOP10 páginas por trigramas compartidos")
+                return False
+            
+            # 7. Análisis de palabras por página
+            if not self.ForEach_Page_Words(df):
+                logger.error("❌ Falló el análisis de palabras por página")
+                return False
+            
+
             
             self.spark.stop()
             

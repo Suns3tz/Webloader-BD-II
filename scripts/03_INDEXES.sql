@@ -6,7 +6,7 @@ CREATE UNIQUE INDEX idx_word_unique ON Word(word);
 
 -- Indices for page's queries
 
-CREATE UNIQUE INDEX idx_url_unique ON Page(url);
+CREATE UNIQUE INDEX idx_url_unique ON Page(url(255));
 
 CREATE INDEX idx_title ON Page(title);
 

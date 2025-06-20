@@ -95,6 +95,8 @@ CREATE TABLE PageXWord (
     id_pageXword INT AUTO_INCREMENT COMMENT 'Unique identifier of the relation.',
     id_page INT NOT NULL COMMENT 'Foreign key to Page table.',
     id_word INT NOT NULL COMMENT 'Foreign key to Word table.',
+    percentage FLOAT NOT NULL COMMENT 'Percentage of repetitions in this page',
+    quantity INT NOT NULL COMMENT 'Total of repetitions in this page',
     PRIMARY KEY (id_pageXword),
     FOREIGN KEY (id_page) REFERENCES Page(id_page) ON DELETE CASCADE,
     FOREIGN KEY (id_word) REFERENCES Word(id_word) ON DELETE CASCADE
@@ -105,11 +107,10 @@ CREATE TABLE Sets2PageXPage (
     id_sets2_pxp INT AUTO_INCREMENT COMMENT 'Unique identifier of the relation.',
     id_page1 INT NOT NULL COMMENT 'Foreign key to first Page.',
     id_page2 INT NOT NULL COMMENT 'Foreign key to second Page.',
-    id_set2 INT NOT NULL COMMENT 'Foreign key to SetWords2.',
+    shared_sets_count INT NOT NULL COMMENT 'Quantity of sets shared.',
     PRIMARY KEY (id_sets2_pxp),
     FOREIGN KEY (id_page1) REFERENCES Page(id_page) ON DELETE CASCADE,
-    FOREIGN KEY (id_page2) REFERENCES Page(id_page) ON DELETE CASCADE,
-    FOREIGN KEY (id_set2) REFERENCES SetWords2(id_set2) ON DELETE CASCADE
+    FOREIGN KEY (id_page2) REFERENCES Page(id_page) ON DELETE CASCADE
 );
 
 -- Crear tabla Sets3PageXPage (si es necesaria)
@@ -117,9 +118,8 @@ CREATE TABLE Sets3PageXPage (
     id_sets3_pxp INT AUTO_INCREMENT COMMENT 'Unique identifier of the relation.',
     id_page1 INT NOT NULL COMMENT 'Foreign key to first Page.',
     id_page2 INT NOT NULL COMMENT 'Foreign key to second Page.',
-    id_set3 INT NOT NULL COMMENT 'Foreign key to SetWords3.',
+    shared_sets_count INT NOT NULL COMMENT 'Quantity of sets shared.',
     PRIMARY KEY (id_sets3_pxp),
     FOREIGN KEY (id_page1) REFERENCES Page(id_page) ON DELETE CASCADE,
-    FOREIGN KEY (id_page2) REFERENCES Page(id_page) ON DELETE CASCADE,
-    FOREIGN KEY (id_set3) REFERENCES SetWords3(id_set3) ON DELETE CASCADE
+    FOREIGN KEY (id_page2) REFERENCES Page(id_page) ON DELETE CASCADE
 );

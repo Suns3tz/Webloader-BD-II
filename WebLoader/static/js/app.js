@@ -6,31 +6,23 @@ class WebLoaderApp {
         this.initializeEventListeners();
         this.loadDockerStatus();
         this.startAutoRefresh();
-    }
-
-    initializeEventListeners() {
-        // Formulario de análisis
-        const analysisForm = document.getElementById('analysisForm');
-        if (analysisForm) {
-            analysisForm.addEventListener('submit', (e) => this.handleAnalysisSubmit(e));
+    }    initializeEventListeners() {
+        // Formulario de consulta
+        const queryForm = document.getElementById('queryForm');
+        if (queryForm) {
+            queryForm.addEventListener('submit', (e) => this.handleQuerySubmit(e));
         }
 
-        // Selector de tipo de análisis
-        const analysisType = document.getElementById('analysisType');
-        if (analysisType) {
-            analysisType.addEventListener('change', (e) => this.handleAnalysisTypeChange(e));
+        // Selector de tipo de consulta
+        const queryType = document.getElementById('queryType');
+        if (queryType) {
+            queryType.addEventListener('change', (e) => this.handleQueryTypeChange(e));
         }
 
         // Botón de reset
-        const resetBtn = document.getElementById('resetForm');
+        const resetBtn = document.getElementById('resetQueryForm');
         if (resetBtn) {
-            resetBtn.addEventListener('click', () => this.resetForm());
-        }
-
-        // Botón para ver resultados
-        const viewResultsBtn = document.getElementById('viewResults');
-        if (viewResultsBtn) {
-            viewResultsBtn.addEventListener('click', () => this.loadResults());
+            resetBtn.addEventListener('click', () => this.resetQueryForm());
         }
 
         // Modal
@@ -116,122 +108,242 @@ class WebLoaderApp {
         `;
         
         return card;
-    }
-
-    handleAnalysisTypeChange(event) {
+    }    handleQueryTypeChange(event) {
         const selectedType = event.target.value;
-        const configOptions = document.getElementById('configOptions');
+        const configOptions = document.getElementById('queryConfigOptions');
         
         if (!selectedType) {
-            configOptions.innerHTML = '<p>Selecciona un tipo de análisis para ver las opciones</p>';
+            configOptions.innerHTML = '<p>Selecciona un tipo de consulta para ver los parámetros</p>';
             configOptions.className = 'config-options';
             return;
         }
 
         configOptions.className = 'config-options active';
         
-        // Generar opciones según el tipo de análisis
-        const configs = this.getAnalysisConfigs(selectedType);
+        // Generar opciones según el tipo de consulta
+        const configs = this.getQueryConfigs(selectedType);
         configOptions.innerHTML = configs;
     }
 
-    getAnalysisConfigs(type) {
+    getQueryConfigs(type) {
         const configs = {
-            'word_frequency': `
+            'word_search': `
                 <div class="config-item">
-                    <label>Ejecutar análisis completo de frecuencia de palabras:</label>
-                    <p>Este análisis procesará todas las páginas web y calculará las frecuencias de palabras.</p>
+                    <label for="queryWord">Palabra a buscar:</label>
+                    <input type="text" id="queryWord" name="word" placeholder="Ingresa una palabra..." required>
+                    <p class="config-description">Función: getTopPagesByWord(palabra)</p>
                 </div>
             `,
-            'word_pairs': `
+            'word_set2': `
                 <div class="config-item">
-                    <label>Ejecutar análisis completo de pares de palabras:</label>
-                    <p>Este análisis procesará todas las páginas web y calculará las frecuencias de pares de palabras.</p>
+                    <label>Par de palabras:</label>
+                    <div class="input-row">
+                        <input type="text" id="queryWord1" name="word1" placeholder="Primera palabra..." required>
+                        <input type="text" id="queryWord2" name="word2" placeholder="Segunda palabra..." required>
+                    </div>
+                    <p class="config-description">Función: getTopPagesBySet2(palabra1, palabra2)</p>
                 </div>
             `,
-            'word_triplets': `
+            'word_set3': `
                 <div class="config-item">
-                    <label>Ejecutar análisis completo de tripletas de palabras:</label>
-                    <p>Este análisis procesará todas las páginas web y calculará las frecuencias de tripletas de palabras.</p>
+                    <label>Tripleta de palabras:</label>
+                    <div class="input-row">
+                        <input type="text" id="queryWord1_3" name="word1" placeholder="Primera palabra..." required>
+                        <input type="text" id="queryWord2_3" name="word2" placeholder="Segunda palabra..." required>
+                        <input type="text" id="queryWord3_3" name="word3" placeholder="Tercera palabra..." required>
+                    </div>
+                    <p class="config-description">Función: getTopPagesBySet3(palabra1, palabra2, palabra3)</p>
                 </div>
             `,
+            'shared_bigrams': `
+                <div class="config-item">
+                    <label for="queryUrl">URL de la página:</label>
+                    <input type="url" id="queryUrl" name="url" placeholder="https://ejemplo.com/pagina" required>
+                    <p class="config-description">Función: getSharedBigramsByPage(url)</p>
+                </div>
+            `,
+            'shared_trigrams': `
+                <div class="config-item">
+                    <label for="queryUrl2">URL de la página:</label>
+                    <input type="url" id="queryUrl2" name="url" placeholder="https://ejemplo.com/pagina" required>
+                    <p class="config-description">Función: getSharedTrigramsByPage(url)</p>
+                </div>
+            `,
+            'page_words': `
+                <div class="config-item">
+                    <label for="queryUrl3">URL de la página:</label>
+                    <input type="url" id="queryUrl3" name="url" placeholder="https://ejemplo.com/pagina" required>
+                    <p class="config-description">Función: getDifferentWordsByPage(url)</p>
+                </div>
+            `,
+            'page_links': `
+                <div class="config-item">
+                    <label for="queryUrl4">URL de la página:</label>
+                    <input type="url" id="queryUrl4" name="url" placeholder="https://ejemplo.com/pagina" required>
+                    <p class="config-description">Función: getLinkCountByPage(url)</p>
+                </div>
+            `,
+            'page_percentages': `
+                <div class="config-item">
+                    <label for="queryUrl5">URL de la página:</label>
+                    <input type="url" id="queryUrl5" name="url" placeholder="https://ejemplo.com/pagina" required>
+                    <p class="config-description">Función: getPercentageWordsByPage(url)</p>
+                </div>
+            `,
+            'word_repetitions': `
+                <div class="config-item">
+                    <label for="queryWordRep">Palabra a contar:</label>
+                    <input type="text" id="queryWordRep" name="word" placeholder="Ingresa una palabra..." required>
+                    <p class="config-description">Función: getTotalRepetitionsByWord(palabra)</p>
+                </div>
+            `,
+            'page_repetitions': `
+                <div class="config-item">
+                    <label for="queryUrl6">URL de la página:</label>
+                    <input type="url" id="queryUrl6" name="url" placeholder="https://ejemplo.com/pagina" required>
+                    <p class="config-description">Función: getTotalRepetitionsByPage(url)</p>
+                </div>
+            `
         };
 
-        return configs[type] || '<p>Configuración no disponible para este tipo de análisis</p>';
-    }
-
-    async handleAnalysisSubmit(event) {
+        return configs[type] || '<p>Configuración no disponible para este tipo de consulta</p>';
+    }    async handleQuerySubmit(event) {
         event.preventDefault();
         
         const formData = new FormData(event.target);
-        const analysisData = Object.fromEntries(formData.entries());
+        const queryType = formData.get('query_type');
         
-        // Validar que Docker esté disponible
-        if (!this.dockerStatus || !this.dockerStatus.docker_available) {
-            this.showModal('Error', 'Docker no está disponible. Por favor, inicia los contenedores necesarios.');
+        if (!queryType) {
+            this.showModal('Error', 'Por favor selecciona un tipo de consulta');
             return;
         }
 
-        // Mostrar que el análisis está siendo procesado
-        const submitBtn = document.getElementById('startAnalysis');
+        // Mostrar que la consulta está siendo procesada
+        const submitBtn = document.getElementById('executeQuery');
         const originalText = submitBtn.innerHTML;
-        submitBtn.innerHTML = '<span class="loading"></span> Ejecutando Spark...';
+        submitBtn.innerHTML = '<span class="loading"></span> Ejecutando consulta...';
         submitBtn.disabled = true;
 
         try {
-            const response = await fetch('/api/analysis/submit', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(analysisData)
-            });
+            let endpoint = '';
+            let params = {};
+            
+            // Construir endpoint según el tipo de consulta
+            switch (queryType) {
+                case 'word_search':
+                    const word = formData.get('word');
+                    if (!word) throw new Error('Palabra requerida');
+                    endpoint = `/api/analysis/word/${encodeURIComponent(word)}`;
+                    break;
+                    
+                case 'word_set2':
+                    const word1 = formData.get('word1');
+                    const word2 = formData.get('word2');
+                    if (!word1 || !word2) throw new Error('Ambas palabras son requeridas');
+                    endpoint = `/api/analysis/word-set2/${encodeURIComponent(word1)}/${encodeURIComponent(word2)}`;
+                    break;
+                    
+                case 'word_set3':
+                    const w1 = formData.get('word1');
+                    const w2 = formData.get('word2');
+                    const w3 = formData.get('word3');
+                    if (!w1 || !w2 || !w3) throw new Error('Las tres palabras son requeridas');
+                    endpoint = `/api/analysis/word-set3/${encodeURIComponent(w1)}/${encodeURIComponent(w2)}/${encodeURIComponent(w3)}`;
+                    break;
+                    
+                case 'shared_bigrams':
+                    const url1 = formData.get('url');
+                    if (!url1) throw new Error('URL requerida');
+                    endpoint = `/api/analysis/shared-bigrams?url=${encodeURIComponent(url1)}`;
+                    break;
+                    
+                case 'shared_trigrams':
+                    const url2 = formData.get('url');
+                    if (!url2) throw new Error('URL requerida');
+                    endpoint = `/api/analysis/shared-trigrams?url=${encodeURIComponent(url2)}`;
+                    break;
+                    
+                case 'page_words':
+                    const url3 = formData.get('url');
+                    if (!url3) throw new Error('URL requerida');
+                    endpoint = `/api/analysis/page-words?url=${encodeURIComponent(url3)}`;
+                    break;
+                    
+                case 'page_links':
+                    const url4 = formData.get('url');
+                    if (!url4) throw new Error('URL requerida');
+                    endpoint = `/api/analysis/page-links?url=${encodeURIComponent(url4)}`;
+                    break;
+                    
+                case 'page_percentages':
+                    const url5 = formData.get('url');
+                    if (!url5) throw new Error('URL requerida');
+                    endpoint = `/api/analysis/page-word-percentages?url=${encodeURIComponent(url5)}`;
+                    break;
+                    
+                case 'word_repetitions':
+                    const wordRep = formData.get('word');
+                    if (!wordRep) throw new Error('Palabra requerida');
+                    endpoint = `/api/analysis/word-repetitions/${encodeURIComponent(wordRep)}`;
+                    break;
+                    
+                case 'page_repetitions':
+                    const url6 = formData.get('url');
+                    if (!url6) throw new Error('URL requerida');
+                    endpoint = `/api/analysis/page-repetitions?url=${encodeURIComponent(url6)}`;
+                    break;
+                    
+                default:
+                    throw new Error('Tipo de consulta no válido');
+            }
 
+            const response = await fetch(endpoint);
             const result = await response.json();
 
             if (response.ok) {
-                this.showAnalysisResult(result);
-                // Cargar resultados después de 10 segundos
-                setTimeout(() => this.loadResults(), 10000);
+                this.displayQueryResults(this.getQueryTitle(queryType, formData), result);
             } else {
-                this.showModal('Error', result.error || 'Error al procesar el análisis');
+                this.showModal('Error', result.error || 'Error al procesar la consulta');
             }
 
         } catch (error) {
-            console.error('Error submitting analysis:', error);
-            this.showModal('Error', 'Error de conexión al servidor');
+            console.error('Error submitting query:', error);
+            this.showModal('Error', error.message || 'Error de conexión al servidor');
         } finally {
             submitBtn.innerHTML = originalText;
             submitBtn.disabled = false;
         }
     }
 
-    async loadResults() {
+    getQueryTitle(queryType, formData) {
+        const titles = {
+            'word_search': `Páginas que más contienen: "${formData.get('word')}"`,
+            'word_set2': `Páginas con el par: "${formData.get('word1')}" y "${formData.get('word2')}"`,
+            'word_set3': `Páginas con la tripleta: "${formData.get('word1')}", "${formData.get('word2')}" y "${formData.get('word3')}"`,
+            'shared_bigrams': `Páginas con bigramas compartidos con: ${formData.get('url')}`,
+            'shared_trigrams': `Páginas con trigramas compartidos con: ${formData.get('url')}`,
+            'page_words': `Palabras distintas de: ${formData.get('url')}`,
+            'page_links': `Conteo de links de: ${formData.get('url')}`,
+            'page_percentages': `Porcentajes de palabras en: ${formData.get('url')}`,
+            'word_repetitions': `Total repeticiones de: "${formData.get('word')}"`,
+            'page_repetitions': `Total repeticiones de: ${formData.get('url')}`
+        };
+        
+        return titles[queryType] || 'Resultados de la consulta';
+    }    async loadResults() {
         try {
             const resultsSection = document.getElementById('resultsSection');
             const resultsContent = document.getElementById('resultsContent');
             
-            resultsContent.innerHTML = '<div class="loading-container"><span class="loading"></span> Cargando resultados...</div>';
+            resultsContent.innerHTML = '<div class="loading-container"><span class="loading"></span> Cargando resumen...</div>';
             resultsSection.style.display = 'block';
 
-            // Cargar resumen
+            // Cargar solo resumen
             const summaryResponse = await fetch('/api/results/summary');
             const summary = await summaryResponse.json();
 
-            // Cargar resultados de palabras
-            const wordsResponse = await fetch('/api/results/words?limit=10');
-            const words = await wordsResponse.json();
-
-            // Cargar resultados de pares
-            const pairsResponse = await fetch('/api/results/word-pairs?limit=10');
-            const pairs = await pairsResponse.json();
-
-            // Cargar resultados de tripletas
-            const tripletsResponse = await fetch('/api/results/word-triplets?limit=10');
-            const triplets = await tripletsResponse.json();
-
-            // Mostrar resultados
-            this.displayResults(summary, words, pairs, triplets);
+            // Mostrar solo el resumen
+            this.displaySummaryOnly(summary);
 
         } catch (error) {
             console.error('Error loading results:', error);
@@ -239,7 +351,7 @@ class WebLoaderApp {
         }
     }
 
-    displayResults(summary, words, pairs, triplets) {
+    displaySummaryOnly(summary) {
         const resultsContent = document.getElementById('resultsContent');
         
         resultsContent.innerHTML = `
@@ -264,56 +376,53 @@ class WebLoaderApp {
                             <span class="summary-label">Tripletas de Palabras</span>
                         </div>
                     </div>
-                </div>
-
-                <div class="results-tabs">
-                    <div class="tab-buttons">
-                        <button class="tab-btn active" onclick="showTab('words')">Palabras</button>
-                        <button class="tab-btn" onclick="showTab('pairs')">Pares</button>
-                        <button class="tab-btn" onclick="showTab('triplets')">Tripletas</button>
-                    </div>
-
-                    <div id="words-tab" class="tab-content active">
-                        <h4>🔤 Top Palabras por Página</h4>
-                        ${this.createResultsTable(words, ['word', 'page_title', 'quantity'], ['Palabra', 'Página', 'Frecuencia'])}
-                    </div>
-
-                    <div id="pairs-tab" class="tab-content">
-                        <h4>🔗 Top Pares de Palabras por Página</h4>
-                        ${this.createResultsTable(pairs, ['word_pair', 'page_title', 'repetition_count'], ['Par de Palabras', 'Página', 'Frecuencia'])}
-                    </div>
-
-                    <div id="triplets-tab" class="tab-content">
-                        <h4>🎯 Top Tripletas de Palabras por Página</h4>
-                        ${this.createResultsTable(triplets, ['word_triplet', 'page_title', 'repetition_count'], ['Tripleta de Palabras', 'Página', 'Frecuencia'])}
+                    <div style="text-align: center; margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                        <p style="color: #666; margin-bottom: 10px;">
+                            <i class="fas fa-info-circle"></i> 
+                            Para explorar datos específicos, utiliza la configuración de consulta.
+                        </p>
+                        <p style="color: #666;">
+                            <i class="fas fa-database"></i> 
+                            Selecciona un tipo de consulta y completa los parámetros para obtener resultados detallados.
+                        </p>
                     </div>
                 </div>
             </div>
         `;
+    }displayQueryResults(title, result) {
+        const resultsSection = document.getElementById('resultsSection');
+        const resultsContent = document.getElementById('resultsContent');
+        
+        let content = `<h4>${title}</h4>`;
+        
+        if (result.error) {
+            content += `<div class="sql-error">❌ ${result.error}</div>`;
+        } else if (result.success && result.data) {
+            const data = result.data;
+            if (Array.isArray(data) && data.length > 0) {
+                content += this.createSQLTable(data);
+            } else {
+                content += '<div class="sql-empty">No se encontraron resultados</div>';
+            }
+        } else {
+            content += '<div class="sql-empty">No se encontraron resultados</div>';
+        }
+        
+        resultsContent.innerHTML = content;
+        resultsSection.style.display = 'block';
+        
+        // Scroll to results
+        resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    createResultsTable(data, columns, headers) {
-        if (!data || data.length === 0) {
-            return '<p>No hay datos disponibles</p>';
+    resetQueryForm() {
+        const form = document.getElementById('queryForm');
+        if (form) {
+            form.reset();
+            const configOptions = document.getElementById('queryConfigOptions');
+            configOptions.innerHTML = '<p>Selecciona un tipo de consulta para ver los parámetros</p>';
+            configOptions.className = 'config-options';
         }
-
-        const tableRows = data.map(row => {
-            const cells = columns.map(col => `<td>${row[col] || 'N/A'}</td>`).join('');
-            return `<tr>${cells}</tr>`;
-        }).join('');
-
-        const headerCells = headers.map(h => `<th>${h}</th>`).join('');
-
-        return `
-            <table class="results-table">
-                <thead>
-                    <tr>${headerCells}</tr>
-                </thead>
-                <tbody>
-                    ${tableRows}
-                </tbody>
-            </table>
-        `;
     }
 
     showAnalysisResult(result) {
@@ -382,9 +491,178 @@ class WebLoaderApp {
     startAutoRefresh() {
         // Actualizar estado de Docker cada 30 segundos
         setInterval(() => {
-            this.loadDockerStatus();
-        }, 30000);
+            this.loadDockerStatus();        }, 30000);
     }
+
+    // ...existing code...
+
+    createSQLTable(data) {
+        if (!data || data.length === 0) return '<div class="sql-empty">No hay datos disponibles</div>';
+        
+        // Obtener las keys del primer objeto para crear headers
+        const keys = Object.keys(data[0]);
+        
+        let tableHTML = '<table class="sql-results-table"><thead><tr>';
+        
+        // Crear headers
+        keys.forEach(key => {
+            const headerName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            tableHTML += `<th>${headerName}</th>`;
+        });
+        
+        tableHTML += '</tr></thead><tbody>';
+        
+        // Crear filas
+        data.forEach(row => {
+            tableHTML += '<tr>';
+            keys.forEach(key => {
+                let value = row[key];
+                // Formatear valores largos (URLs, títulos)
+                if (typeof value === 'string' && value.length > 50) {
+                    value = `<span title="${value}">${value.substring(0, 50)}...</span>`;
+                }
+                tableHTML += `<td>${value || '-'}</td>`;
+            });
+            tableHTML += '</tr>';
+        });
+        
+        tableHTML += '</tbody></table>';
+        return tableHTML;
+    }
+
+    showLoadingModal(message) {
+        const modal = document.getElementById('modal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalMessage = document.getElementById('modalMessage');
+        
+        modalTitle.textContent = 'Procesando...';
+        modalMessage.innerHTML = `<div class="loading-container"><span class="loading"></span> ${message}</div>`;
+        modal.style.display = 'block';
+    }
+
+    async showAvailablePages() {
+        this.showLoadingModal('Cargando páginas disponibles...');
+        
+        try {
+            const response = await fetch('/api/helper/pages?limit=20');
+            const result = await response.json();
+            
+            this.closeModal();
+            
+            if (result.success && result.data) {
+                this.displayHelperData('Páginas Disponibles en la Base de Datos', result.data, 'pages');
+            } else {
+                this.showModal('Error', result.error || 'Error obteniendo páginas');
+            }
+            
+        } catch (error) {
+            this.closeModal();
+            this.showModal('Error', 'Error al cargar páginas: ' + error.message);
+        }
+    }
+
+    async showAvailableWords() {
+        this.showLoadingModal('Cargando palabras populares...');
+        
+        try {
+            const response = await fetch('/api/helper/words?limit=50');
+            const result = await response.json();
+            
+            this.closeModal();
+            
+            if (result.success && result.data) {
+                this.displayHelperData('Palabras Más Populares', result.data, 'words');
+            } else {
+                this.showModal('Error', result.error || 'Error obteniendo palabras');
+            }
+            
+        } catch (error) {
+            this.closeModal();
+            this.showModal('Error', 'Error al cargar palabras: ' + error.message);
+        }
+    }    displayHelperData(title, data, type) {
+        // Remover datos de ayuda anteriores
+        const existingHelper = document.querySelector('.helper-data');
+        if (existingHelper) {
+            existingHelper.remove();
+        }
+
+        // Crear contenedor
+        const helperContainer = document.createElement('div');
+        helperContainer.className = 'helper-data sql-results';
+        
+        let content = `<h4>💡 ${title}</h4>`;
+        
+        if (type === 'pages') {
+            content += '<div class="helper-grid">';
+            data.forEach(page => {
+                const shortUrl = page.url.length > 60 ? page.url.substring(0, 60) + '...' : page.url;
+                const shortTitle = page.title && page.title.length > 40 ? page.title.substring(0, 40) + '...' : (page.title || 'Sin título');
+                content += `
+                    <div class="helper-item" onclick="app.fillUrl('${page.url}')">
+                        <div class="helper-title">${shortTitle}</div>
+                        <div class="helper-url">${shortUrl}</div>
+                    </div>
+                `;
+            });
+            content += '</div>';
+            content += '<p class="helper-hint"><i class="fas fa-info-circle"></i> Haz clic en cualquier URL para copiarla al campo de consulta</p>';
+        } else if (type === 'words') {
+            content += '<div class="helper-words">';
+            data.forEach(word => {
+                content += `<span class="helper-word" onclick="app.fillWord('${word}')">${word}</span>`;
+            });
+            content += '</div>';
+            content += '<p class="helper-hint"><i class="fas fa-info-circle"></i> Haz clic en cualquier palabra para usarla en las consultas</p>';
+        }
+        
+        helperContainer.innerHTML = content;
+        
+        // Insertar después de la sección principal
+        const mainSection = document.querySelector('.main-section');
+        mainSection.parentNode.insertBefore(helperContainer, mainSection.nextSibling);
+        
+        // Scroll to helper data
+        helperContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }fillUrl(url) {
+        // Buscar el primer campo de URL vacío
+        const urlInputs = [
+            'queryUrl', 'queryUrl2', 'queryUrl3', 'queryUrl4', 'queryUrl5', 'queryUrl6'
+        ];
+        
+        for (let inputId of urlInputs) {
+            const input = document.getElementById(inputId);
+            if (input && !input.value.trim()) {
+                input.value = url;
+                this.showModal('✅ URL Copiada', `URL "${url}" ha sido copiada al campo de consulta`);
+                return;
+            }
+        }
+        
+        // Si todos están llenos o no existen, mostrar mensaje
+        this.showModal('💡 URL Disponible', `URL: "${url}" - Selecciona un tipo de consulta que requiera URL primero`);
+    }
+
+    fillWord(word) {
+        // Buscar el primer campo de palabra vacío
+        const wordInputs = [
+            'queryWord', 'queryWordRep', 'queryWord1', 'queryWord1_3', 'queryWord2', 'queryWord2_3', 'queryWord3_3'
+        ];
+        
+        for (let inputId of wordInputs) {
+            const input = document.getElementById(inputId);
+            if (input && !input.value.trim()) {
+                input.value = word;
+                this.showModal('✅ Palabra Copiada', `Palabra "${word}" ha sido copiada al campo de consulta`);
+                return;
+            }
+        }
+        
+        // Si todos están llenos o no existen, mostrar mensaje
+        this.showModal('💡 Palabra Disponible', `Palabra: "${word}" - Selecciona un tipo de consulta que requiera palabras primero`);
+    }
+
+    // ...existing code...
 }
 
 // Función global para cambiar tabs
