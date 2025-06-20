@@ -26,9 +26,10 @@ stop_words = set(stopwords.words('spanish')) # carga palabras vacías en españo
 visited = set() 
 visited_lock = threading.Lock()
 base_url = "https://es.wikipedia.org"
-output_dir = "wiki_data"
-max_pages = 5 # Número máximo de páginas a visitar
-max_depth = 5 # Profundidad máxima de enlaces a seguir
+
+output_dir = "wiki_data" # Directorio de salida
+max_pages = 15 # Maximo de paginas a visitar
+max_depth = 5 # Profundidad máxima del crawler
 max_workers = 8  # Número de hilos
 
 # Crear directorio si no existe
