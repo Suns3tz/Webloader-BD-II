@@ -99,12 +99,12 @@ class WebLoaderApp {
         
         card.className = `service-card ${statusClass}`;
         card.innerHTML = `
-            <i class="${serviceInfo.icon}"></i>
-            <h3>${serviceInfo.name}</h3>
             <span class="service-status ${statusClass}">
                 ${serviceData.running ? 'Ejecutándose' : 
-                  serviceData.status === 'not_found' ? 'No encontrado' : 'Detenido'}
+                serviceData.status === 'not_found' ? 'No encontrado' : 'Detenido'}
             </span>
+            <i class="${serviceInfo.icon}"></i>
+            <h3>${serviceInfo.name}</h3>
         `;
         
         return card;
