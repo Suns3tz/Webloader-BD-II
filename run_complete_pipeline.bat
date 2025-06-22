@@ -157,12 +157,7 @@ if errorlevel 1 (
 echo ✅ Archivo wiki_data.jsonl encontrado en HDFS
 echo 📂 Información del archivo:
 docker exec namenode hdfs dfs -du -h /user/root/wiki_data
-
-REM Mostrar primeras líneas usando comandos de Windows para Docker
-echo 📄 Primeras líneas del archivo:
-for /f "tokens=1,2,3" %%i in ('docker exec namenode hdfs dfs -cat /user/root/wiki_data/wiki_data.jsonl ^| findstr /n "^"') do (
-    if %%i LEQ 3 echo %%j %%k
-)
+echo.
 
 REM === PASO 3: EJECUTAR ANÁLISIS DE SPARK ===
 echo.
