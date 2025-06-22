@@ -1,280 +1,429 @@
 import requests
 from bs4 import BeautifulSoup
-import json
-import os
 import re
-from urllib.parse import urljoin
-from collections import Counter
-from nltk.corpus import stopwords
-from nltk import word_tokenize
-from nltk.util import ngrams
-from unidecode import unidecode
-from datetime import datetime, timedelta
-import subprocess
-import os
-import threading
-import queue
+import json
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urljoin, unquote, quote
+from nltk.util import ngrams
+from nltk.corpus import stopwords
+import nltk
+import threading
+from queue import Queue
+from threading import Semaphore
+import os
+import subprocess
+from datetime import datetime
 
-container_name = "namenode"
-local_folder = "wiki_data"
-container_folder = "/wiki_data"
-hdfs_target_dir = "/user/root/wiki_data"
+# Base configuration
+BASE_WIKI = "https://es.wikipedia.org/wiki/"
+REST_API_HTML = "https://es.wikipedia.org/api/rest_v1/page/html/"
+API_URL = "https://es.wikipedia.org/w/api.php"
+HEADERS = {"User-Agent": "WikipediaCrawlerBot/1.0 (bliang@estudiantec.cr)"}
 
-stop_words = set(stopwords.words('spanish')) # carga palabras vacías en español
-visited = set() 
+MAX_DEPTH = 3
+MAX_DATA_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_THREADS = 50  # Número de threads concurrentes (dentro del límite de rate)
+REQUESTS_PER_SECOND = 200  # Límite de la API
+REQUEST_INTERVAL = 1.0 / REQUESTS_PER_SECOND  # Intervalo entre requests
+
+# HDFS Configuration
+CONTAINER_NAME = "namenode"
+LOCAL_FOLDER = "wiki_data"
+CONTAINER_FOLDER = "/wiki_data"
+HDFS_TARGET_DIR = "/user/root/wiki_data"
+
+# Cache file configuration
+CACHE_FILE = "visited_pages_cache.json"
+
+# Download Spanish stopwords if not already downloaded
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    nltk.download('stopwords')
+
+EXCLUDED_WORDS = set(stopwords.words('spanish'))
+
+# Variables compartidas y mecanismos de control
+visited = set()
 visited_lock = threading.Lock()
-base_url = "https://es.wikipedia.org"
-
-output_dir = "wiki_data" # Directorio de salida
-max_pages = 15 # Maximo de paginas a visitar
-max_depth = 5 # Profundidad máxima del crawler
-max_workers = 8  # Número de hilos
-
-# Crear directorio si no existe
-os.makedirs(output_dir, exist_ok=True)
-output_file_path = os.path.join(output_dir, "wiki_data.jsonl")
-output_file_lock = threading.Lock() 
-
-# Cola para URLs pendientes
-url_queue = queue.Queue()
+total_data_size = 0
+size_lock = threading.Lock()
+queue = Queue()
+output_lock = threading.Lock()
+last_request_time = 0
+rate_lock = threading.Lock()
+request_semaphore = Semaphore(REQUESTS_PER_SECOND)  # Control de rate
+cache_lock = threading.Lock()  # Lock para acceso al cache
 
 def run_command(cmd):
+    """Execute subprocess command with error handling"""
     try:
         print(f"Running: {' '.join(cmd)}")
-        subprocess.run(cmd, check=True)
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        if result.stdout:
+            print(f"Output: {result.stdout}")
+        return True
     except subprocess.CalledProcessError as e:
         print(f"Error: {e}")
+        if e.stderr:
+            print(f"Error output: {e.stderr}")
+        return False
 
-def clean_text(text):
-    text = unidecode(text.lower())
-    words = word_tokenize(text)
-    words = [w for w in words if w.isalpha() and w not in stop_words]
-    return words
-
-def extract_edits_per_day(soup, url):
-    try:
-        history_link = soup.select_one('a[href*="action=history"]')
-        
-        if not history_link:
-            return 0
-        
-        history_url = urljoin(base_url, history_link['href'])
-        history_response = requests.get(history_url, timeout=10)
-        history_soup = BeautifulSoup(history_response.text, 'html.parser')
-        
-        edit_rows = history_soup.select('ul#pagehistory li, .mw-history-line, li[data-mw-revid]')
-        
-        if not edit_rows:
-            return 0
-        
-        months = {'ene': 1, 'feb': 2, 'mar': 3, 'abr': 4, 'may': 5, 'jun': 6,
-                  'jul': 7, 'ago': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dic': 12}
-        
-        total_edits = 0
-        creation_date = None
-        latest_date = None
-        
-        for row in edit_rows:
-            try:
-                row_text = row.get_text()
-                match = re.search(r'(\d{1,2}):(\d{2})\s+(\d{1,2})\s+(\w+)\s+(\d{4})', row_text)
-                
-                if match:
-                    day, month_name, year = int(match.group(3)), match.group(4).lower(), int(match.group(5))
-                    month = months.get(month_name, 0)
-                    
-                    if month > 0:
-                        edit_date = datetime(year, month, day).date()
-                        total_edits += 1
-                        
-                        if creation_date is None or edit_date < creation_date:
-                            creation_date = edit_date
-                        if latest_date is None or edit_date > latest_date:
-                            latest_date = edit_date
-                            
-            except (ValueError, IndexError):
-                continue
-        
-        if total_edits > 0 and creation_date and latest_date:
-            days_span = (latest_date - creation_date).days + 1
-            if days_span > 0:
-                avg_edits_per_day = total_edits / days_span
-                return round(avg_edits_per_day, 4)
-        
-        return 0
-        
-    except Exception:
-        return 0
-
-def upload_to_hdfs():
-    if not os.path.exists(local_folder):
-        print(f"Folder '{local_folder}' not found.")
-        return
-
-    print(f"Uploading file '{local_folder}'...")
-    run_command(["docker", "cp", local_folder, f"{container_name}:{container_folder}"])
-
-    print(f" Creating HDFS directory '{hdfs_target_dir}'...")
-    run_command(["docker", "exec", container_name, "hdfs", "dfs", "-mkdir", "-p", hdfs_target_dir])
-
-    print(f"Uploading files from container to HDFS...")
-    run_command(["docker", "exec", container_name, "hdfs", "dfs", "-put", "-f", "/wiki_data/wiki_data.jsonl", hdfs_target_dir])
-
-    print(f"Verifying files in HDFS:")
-    run_command([
-        "docker", "exec", container_name, "hdfs", "dfs", "-ls", hdfs_target_dir
+def setup_hdfs_environment():
+    """Setup local folder and HDFS environment"""
+    # Create local directory if it doesn't exist
+    os.makedirs(LOCAL_FOLDER, exist_ok=True)
+    print(f"Local folder '{LOCAL_FOLDER}' ready")
+    
+    # Create HDFS directory
+    print(f"Creating HDFS directory '{HDFS_TARGET_DIR}'...")
+    return run_command([
+        "docker", "exec", CONTAINER_NAME, 
+        "hdfs", "dfs", "-mkdir", "-p", HDFS_TARGET_DIR
     ])
 
-def is_crawling_complete():
-    """Verifica si el crawling debe detenerse"""
-    with visited_lock:
-        return len(visited) >= max_pages
+def upload_to_hdfs():
+    """Upload files to HDFS"""
+    if not os.path.exists(LOCAL_FOLDER):
+        print(f"Folder '{LOCAL_FOLDER}' not found.")
+        return False
 
-def add_urls_to_queue(links, current_depth):
-    """Añade URLs a la cola si no han sido visitadas"""
-    if current_depth >= max_depth:
-        return
-    
-    for link in links:
-        with visited_lock:
-            if link not in visited and len(visited) < max_pages:
-                url_queue.put((link, current_depth + 1))
+    print(f"Uploading folder '{LOCAL_FOLDER}' to container...")
+    if not run_command(["docker", "cp", LOCAL_FOLDER, f"{CONTAINER_NAME}:{CONTAINER_FOLDER}"]):
+        return False
 
-def save_data_to_file(data):
-    """Guarda datos en archivo JSONL de forma thread-safe"""
-    with output_file_lock:
-        with open(output_file_path, 'a', encoding='utf-8') as f:
-            f.write(json.dumps(data, ensure_ascii=False) + '\n')
+    print(f"Uploading files from container to HDFS...")
+    if not run_command([
+        "docker", "exec", CONTAINER_NAME, 
+        "hdfs", "dfs", "-put", "-f", "/wiki_data/wiki_data.jsonl", HDFS_TARGET_DIR
+    ]):
+        return False
 
-def parse_page_worker(url, depth):
-    """Worker function que procesa una sola página"""
-    # Verificar si ya fue visitada
-    with visited_lock:
-        if url in visited or len(visited) >= max_pages:
-            return None
-        visited.add(url)
-        current_count = len(visited)
-    
-    print(f"[{current_count}] Visitando: {url} (Profundidad: {depth})")
+    print(f"Verifying files in HDFS:")
+    return run_command([
+        "docker", "exec", CONTAINER_NAME, 
+        "hdfs", "dfs", "-ls", HDFS_TARGET_DIR
+    ])
 
+def check_hdfs_status():
+    """Check HDFS status and available space"""
+    print("Checking HDFS status...")
+    run_command([
+        "docker", "exec", CONTAINER_NAME, 
+        "hdfs", "dfsadmin", "-report"
+    ])
+
+def load_visited_cache():
+    """Carga las páginas visitadas desde el archivo de cache"""
+    global visited
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+                cache_data = json.load(f)
+                visited = set(cache_data.get('visited_pages', []))
+                print(f"Loaded {len(visited)} previously visited pages from cache")
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"Error loading cache file: {e}")
+            visited = set()
+    else:
+        visited = set()
+        print("No cache file found, starting fresh")
+
+def save_visited_cache():
+    """Guarda las páginas visitadas al archivo de cache"""
     try:
-        # Realizar solicitud HTTP y parsear HTML
-        res = requests.get(url, timeout=10)
-        soup = BeautifulSoup(res.text, 'html.parser')
+        with cache_lock:
+            cache_data = {
+                'visited_pages': list(visited),
+                'last_updated': time.strftime('%Y-%m-%d %H:%M:%S')
+            }
+            with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+                json.dump(cache_data, f, ensure_ascii=False, indent=2)
+    except IOError as e:
+        print(f"Error saving cache file: {e}")
 
-        # Extraer título y párrafos
-        title = soup.find('h1').text if soup.find('h1') else "Sin título"
-        paragraphs = soup.find_all('p')
-        raw_text = ' '.join(p.get_text() for p in paragraphs)
+def add_to_visited_cache(page_id):
+    """Añade una página al cache de visitadas y actualiza el archivo"""
+    with visited_lock:
+        if page_id not in visited:
+            visited.add(page_id)
+            # Actualizar el cache cada 10 páginas para no sobrecargar el I/O
+            if len(visited) % 10 == 0:
+                threading.Thread(target=save_visited_cache, daemon=True).start()
+            return True
+    return False
 
-        # Extraer palabras, bigramas y trigramas
-        words = clean_text(raw_text)
-        bigrams = [' '.join(b) for b in ngrams(words, 2)]
-        trigrams = [' '.join(t) for t in ngrams(words, 3)]
+def is_page_visited(page_id):
+    """Verifica si una página ya ha sido visitada"""
+    with visited_lock:
+        return page_id in visited
 
-        # Extraer enlaces relevantes
-        links = set()
-        for a in soup.find_all('a', href=True):
-            href = a['href']
-            if href.startswith('/wiki/') and ':' not in href:
-                full_link = urljoin(base_url, href)
-                links.add(full_link)
+class RateLimiter:
+    def __init__(self, rate):
+        self.rate = rate
+        self.tokens = rate
+        self.last_check = time.time()
+        self.lock = threading.Lock()
 
-        # Diccionario con datos extraídos
-        data = {
-            'url': url,
-            'title': title,
-            'word_list': words,
-            'bigrams': bigrams,
-            'trigrams': trigrams,
-            'edits_per_day': extract_edits_per_day(soup, url),
-            'links': list(links)
-        }
+    def consume(self):
+        with self.lock:
+            now = time.time()
+            elapsed = now - self.last_check
+            self.last_check = now
+            
+            # Añadir tokens basados en el tiempo transcurrido
+            self.tokens += elapsed * self.rate
+            if self.tokens > self.rate:
+                self.tokens = self.rate
+            
+            if self.tokens >= 1:
+                self.tokens -= 1
+                return True
+            return False
 
-        # Guardar datos en archivo
-        save_data_to_file(data)
+# Global rate limiter
+rate_limiter = RateLimiter(REQUESTS_PER_SECOND)
 
-        # Añadir nuevos enlaces a la cola
-        add_urls_to_queue(links, depth)
+def clean_and_process_text(text):
+    text = re.sub(r'[^\w\s]', '', text, flags=re.UNICODE).lower()
+    words = text.split()
+    return [word for word in words if word not in EXCLUDED_WORDS]
 
-        return data
+def generate_ngrams(words, n):
+    return [' '.join(gram) for gram in ngrams(words, n)] if len(words) >= n else []
 
-    except Exception as e:
-        print(f"Error en {url}: {e}")
+def get_page_html_rest(title):
+    global last_request_time
+    
+    # Esperar nuestro turno para cumplir con el rate limit
+    while not rate_limiter.consume():
+        time.sleep(0.001)  # Espera activa muy corta
+    
+    url = REST_API_HTML + quote(title.replace(' ', '_'))
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=10)
+        if resp.status_code == 200:
+            return resp.text
+        else:
+            print(f"[{resp.status_code}] Failed to fetch {title}")
+            return None
+    except requests.RequestException as e:
+        print(f"Request error fetching {title}: {str(e)}")
         return None
 
-def crawler_worker():
-    """Función worker que procesa URLs de la cola"""
-    while not is_crawling_complete():
-        try:
-            # Obtener URL de la cola con timeout
-            url, depth = url_queue.get(timeout=5)
-            
-            # Procesar la página
-            parse_page_worker(url, depth)
-            
-            # Marcar tarea como completada
-            url_queue.task_done()
-            
-        except queue.Empty:
-            # Si no hay URLs en la cola, continuar
-            continue
-        except Exception as e:
-            print(f"Error en worker: {e}")
+def extract_links(soup):
+    links = set()
+    for a in soup.find_all('a', href=True):
+        href = a['href']
+        if href.startswith('/wiki/'):
+            if ':' not in href and '#' not in href:
+                full_url = urljoin(BASE_WIKI, href)
+                links.add(full_url)
+        elif href.startswith('./'):
+            clean_href = href[2:]
+            if clean_href and ':' not in clean_href and '#' not in clean_href:
+                full_url = BASE_WIKI + clean_href
+                links.add(full_url)
+        elif 'wikipedia.org/wiki/' in href:
+            if ':' not in href.split('/wiki/')[-1] and '#' not in href:
+                links.add(href)
+    
+    return list(links)
 
-def run_threaded_crawler():
-    """Ejecuta el crawler con múltiples hilos"""
-    start_url = "https://es.wikipedia.org/wiki/Inteligencia_artificial"
+def get_edit_rate(title):
+    # También aplicamos rate limiting a las llamadas a la API
+    while not rate_limiter.consume():
+        time.sleep(0.001)
     
-    # Añadir URL inicial a la cola
-    url_queue.put((start_url, 0))
+    try:
+        params = {
+            "action": "query",
+            "format": "json",
+            "prop": "revisions",
+            "rvlimit": "500",
+            "rvprop": "timestamp",
+            "titles": title
+        }
+        resp = requests.get(API_URL, params=params, headers=HEADERS, timeout=10)
+        data = resp.json()
+        pages = data.get('query', {}).get('pages', {})
+        for page in pages.values():
+            revisions = page.get('revisions', [])
+            if len(revisions) < 2:
+                return 0
+            timestamps = [time.strptime(r["timestamp"], "%Y-%m-%dT%H:%M:%SZ") for r in revisions]
+            timestamps.sort()
+            start = time.mktime(timestamps[0])
+            end = time.mktime(timestamps[-1])
+            days = max((end - start) / (60 * 60 * 24), 1)
+            return round(len(revisions) / days, 2)
+    except Exception as e:
+        print(f"Error getting edit rate for {title}: {str(e)}")
+        return 0
+
+def process_page(title, depth, file_handle):
+    global total_data_size
     
-    # Crear y ejecutar hilos
+    # Verificar si ya visitamos esta página
+    if is_page_visited(title):
+        print(f"Skipping already visited page: {title}")
+        return
+    
+    html = get_page_html_rest(title)
+    if not html:
+        return
+
+    # Marcar como visitada después de obtener el HTML exitosamente
+    add_to_visited_cache(title)
+
+    soup = BeautifulSoup(html, "html.parser")
+    text_blocks = soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5'])
+    full_text = " ".join(block.get_text(separator=" ", strip=True) for block in text_blocks)
+
+    page_title_tag = soup.find('h1')
+    page_title = page_title_tag.text.strip() if page_title_tag else title.replace('_', ' ')
+
+    word_list = clean_and_process_text(full_text)
+    bigrams = generate_ngrams(word_list, 2)
+    trigrams = generate_ngrams(word_list, 3)
+    edits_per_day = get_edit_rate(page_title)
+    links = extract_links(soup)
+
+    item = {
+        "url": BASE_WIKI + quote(title.replace(' ', '_')),
+        "title": page_title,
+        "word_list": word_list,
+        "bigrams": bigrams,
+        "trigrams": trigrams,
+        "edits_per_day": edits_per_day,
+        "links": links
+    }
+
+    json_line = json.dumps(item, ensure_ascii=False)
+    
+    with output_lock:
+        file_handle.write(json_line + "\n")
+        file_handle.flush()
+    
+    with size_lock:
+        total_data_size += len(json_line.encode('utf-8'))
+        if total_data_size >= MAX_DATA_SIZE:
+            # Vaciar la cola si alcanzamos el límite de tamaño
+            while not queue.empty():
+                try:
+                    queue.get_nowait()
+                    queue.task_done()
+                except:
+                    pass
+    
+    print(f"Crawled: {page_title} | Depth: {depth} | Links: {len(links)} | Size: {total_data_size / (1024 * 1024):.2f} MB")
+
+    # Añadir nuevos links a la cola si no hemos alcanzado el límite
+    if depth < MAX_DEPTH and total_data_size < MAX_DATA_SIZE:
+        for link_url in links:
+            link_title = unquote(link_url.split("/wiki/")[-1])
+            if not is_page_visited(link_title):
+                queue.put((link_title, depth + 1))
+
+def worker(file_handle):
+    while True:
+        try:
+            title, depth = queue.get(timeout=5)  # Timeout más corto para responder más rápido al cierre
+            
+            if total_data_size >= MAX_DATA_SIZE:
+                queue.task_done()
+                break
+                
+            process_page(title, depth, file_handle)
+            queue.task_done()
+        except Queue.Empty:
+            break
+        except Exception as e:
+            print(f"Error in worker thread: {str(e)}")
+            queue.task_done()
+
+def crawl_rest(start_title, file_handle):
+    global total_data_size
+    
+    # Cargar cache de páginas visitadas al inicio
+    load_visited_cache()
+    
+    # Solo añadir la página inicial si no ha sido visitada
+    if not is_page_visited(start_title):
+        queue.put((start_title, 0))
+    else:
+        print(f"Start page {start_title} already visited, loading from cache")
+    
+    # Crear y lanzar threads
     threads = []
-    for i in range(max_workers):
-        t = threading.Thread(target=crawler_worker, daemon=True)
+    for _ in range(MAX_THREADS):
+        t = threading.Thread(target=worker, args=(file_handle,))
+        t.daemon = True
         t.start()
         threads.append(t)
-        print(f"Iniciado hilo {i+1}/{max_workers}")
     
-    # Monitorear progreso
-    start_time = time.time()
-    while not is_crawling_complete():
-        time.sleep(10)  # Revisar cada 10 segundos
-        with visited_lock:
-            current_count = len(visited)
-        
-        elapsed_time = time.time() - start_time
-        print(f"Progreso: {current_count}/{max_pages} páginas procesadas en {elapsed_time:.1f} segundos")
-        
-        # Si la cola está vacía y no se han alcanzado las páginas máximas, esperar un poco más
-        if url_queue.empty() and current_count < max_pages:
-            print("Cola vacía, esperando...")
-            time.sleep(5)
+    # Esperar a que se complete la cola
+    queue.join()
     
-    print("Crawling completado. Esperando que terminen los hilos...")
-    
-    # Esperar a que terminen todos los hilos
+    # Esperar a que todos los threads terminen
     for t in threads:
-        t.join(timeout=30)
+        t.join()
     
-    print(f"Crawler finalizado. Total de páginas visitadas: {len(visited)}")
-    
-    # Subir datos a HDFS
-    print("Completado...")
+    # Guardar el cache final
+    save_visited_cache()
 
-# Ejecutar el crawler
-if __name__ == "__main__":
-    print("Que desea realizar:\n"+
-          "1. Crawler\n"+
-          "2. Subir a HDFS\n"
-          )
-    choice = input("> ").strip()
-    if choice == "1":
-        run_threaded_crawler()
-    elif choice == "2":
-        upload_to_hdfs()
+def main():
+    """Main function with HDFS integration"""
+    # Setup HDFS environment
+    print("Setting up HDFS environment...")
+    if not setup_hdfs_environment():
+        print("Failed to setup HDFS environment. Continuing with local storage only.")
+    
+    # Check HDFS status
+    check_hdfs_status()
+    
+    # Create output file in the local wiki_data folder
+    output_file = os.path.join(LOCAL_FOLDER, "wiki_data.jsonl")
+    
+    with open(output_file, "w", encoding="utf-8") as f:
+        start_time = time.time()
+        try:
+            crawl_rest("Inteligencia_artificial", f)
+        except KeyboardInterrupt:
+            print("\nReceived keyboard interrupt. Shutting down gracefully...")
+            # Guardar el cache antes de salir
+            save_visited_cache()
+            # Vaciar la cola para permitir que los threads terminen
+            while not queue.empty():
+                try:
+                    queue.get_nowait()
+                    queue.task_done()
+                except:
+                    pass
+    
+    total_time = time.time() - start_time
+    total_requests = len(visited)
+    
+    print(f"\n✅ Finished crawling. Total data: {total_data_size / (1024 * 1024):.2f} MB")
+    print(f"Time taken: {total_time:.2f} seconds")
+    print(f"Total pages crawled: {total_requests}")
+    print(f"Average request rate: {total_requests/max(total_time, 1):.2f} requests/sec")
+    print(f"Cache saved to: {CACHE_FILE}")
+    print(f"Output file: {output_file}")
+    
+    # Upload to HDFS
+    print("\n🚀 Starting HDFS upload...")
+    if upload_to_hdfs():
+        print("✅ Successfully uploaded data to HDFS!")
+        
+        # Verify upload
+        print("\n📊 Final HDFS verification:")
+        run_command([
+            "docker", "exec", CONTAINER_NAME, 
+            "hdfs", "dfs", "-du", "-h", HDFS_TARGET_DIR
+        ])
     else:
-        print("Opción no válida. Saliendo...")
+        print("❌ Failed to upload data to HDFS")
+
+if __name__ == "__main__":
+    main()

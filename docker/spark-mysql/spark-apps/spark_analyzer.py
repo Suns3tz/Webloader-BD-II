@@ -130,7 +130,7 @@ class WikiDataAnalyzer:
             clear_commands = [
                 "DELETE FROM TopWordPages",
                 "DELETE FROM Top2WordsPages", 
-                "DELETE FROM Top3WordPages",
+                "DELETE FROM Top3WordsPages",
                 "DELETE FROM PageXWord",
                 "DELETE FROM Sets2PageXPage",
                 "DELETE FROM Sets3PageXPage",
@@ -243,8 +243,123 @@ class WikiDataAnalyzer:
             logger.error(f"❌ Error analizando páginas: {e}")
             return False
     
+    def save_to_mysql_with_upsert(self, df, table_name):
+        """Guardar DataFrame en MySQL usando INSERT ON DUPLICATE KEY UPDATE"""
+        try:
+            mysql_url = f"jdbc:mysql://{self.mysql_config['host']}:{self.mysql_config['port']}/{self.mysql_config['database']}"
+            
+            properties = {
+                "user": self.mysql_config['user'],
+                "password": self.mysql_config['password'],
+                "driver": "com.mysql.cj.jdbc.Driver",
+                "batchsize": "1000",
+                "rewriteBatchedStatements": "true"
+            }
+            
+            # Para la tabla Word, usar INSERT ON DUPLICATE KEY UPDATE
+            if table_name == "Word":
+                properties["createTableOptions"] = "ENGINE=InnoDB"
+                # Usar una estrategia personalizada para manejar duplicados
+                df.write \
+                    .mode("append") \
+                    .option("truncate", "false") \
+                    .option("createTableOptions", "ENGINE=InnoDB") \
+                    .jdbc(url=mysql_url, table=table_name, properties=properties)
+            else:
+                df.write \
+                    .mode("append") \
+                    .jdbc(url=mysql_url, table=table_name, properties=properties)
+            
+            logger.info(f"✅ Registros guardados en tabla {table_name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error guardando en MySQL tabla {table_name}: {e}")
+            return False
+    
+    def save_to_mysql_with_ignore(self, df, table_name):
+        """Guardar DataFrame en MySQL usando INSERT IGNORE para manejar duplicados"""
+        try:
+            import mysql.connector
+            from mysql.connector import Error
+            
+            # Obtener conexión directa a MySQL
+            connection = mysql.connector.connect(
+                host=self.mysql_config['host'],
+                port=self.mysql_config['port'],
+                user=self.mysql_config['user'],
+                password=self.mysql_config['password'],
+                database=self.mysql_config['database']
+            )
+            
+            cursor = connection.cursor()
+            
+            # Recopilar todas las filas
+            rows_list = [row.asDict() for row in df.collect()]
+            
+            if table_name == "SetWords2":
+                # Insertar bigramas usando INSERT IGNORE
+                insert_query = """
+                INSERT IGNORE INTO SetWords2 (word1, word2) 
+                VALUES (%s, %s)
+                """
+                data_tuples = [(row['word1'], row['word2']) for row in rows_list]
+                
+            elif table_name == "SetWords3":
+                # Insertar trigramas usando INSERT IGNORE
+                insert_query = """
+                INSERT IGNORE INTO SetWords3 (word1, word2, word3) 
+                VALUES (%s, %s, %s)
+                """
+                data_tuples = [(row['word1'], row['word2'], row['word3']) for row in rows_list]
+                
+            elif table_name == "TopWordPages":
+                # Insertar relación TopWordPages usando INSERT IGNORE
+                insert_query = """
+                INSERT IGNORE INTO TopWordPages (id_word, id_page, quantity) 
+                VALUES (%s, %s, %s)
+                """
+                data_tuples = [(row['id_word'], row['id_page'], row['quantity']) for row in rows_list]
+                
+            elif table_name == "Top2WordsPages":
+                # Insertar relación Top2WordsPages usando INSERT IGNORE
+                insert_query = """
+                INSERT IGNORE INTO Top2WordsPages (id_set2, id_page, repetition_count) 
+                VALUES (%s, %s, %s)
+                """
+                data_tuples = [(row['id_set2'], row['id_page'], row['repetition_count']) for row in rows_list]
+                
+            elif table_name == "Top3WordsPages":
+                # Insertar relación Top3WordsPages usando INSERT IGNORE
+                insert_query = """
+                INSERT IGNORE INTO Top3WordsPages (id_set3, id_page, repetition_count) 
+                VALUES (%s, %s, %s)
+                """
+                data_tuples = [(row['id_set3'], row['id_page'], row['repetition_count']) for row in rows_list]
+                
+            else:
+                logger.error(f"❌ Tabla {table_name} no soportada en save_to_mysql_with_ignore")
+                return False
+            
+            # Ejecutar inserción por lotes
+            if data_tuples:
+                cursor.executemany(insert_query, data_tuples)
+                connection.commit()
+                logger.info(f"✅ {len(data_tuples)} registros procesados en tabla {table_name} (duplicados ignorados)")
+            
+            cursor.close()
+            connection.close()
+            return True
+            
+        except Error as e:
+            logger.error(f"❌ Error en MySQL para tabla {table_name}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"❌ Error guardando en tabla {table_name}: {e}")
+            return False
+    
     def analyze_word_frequency(self, df):
-        """Análisis completo de frecuencia de palabras"""
+        """Análisis completo de frecuencia de palabras con manejo robusto de duplicados"""
         try:
             logger.info("🔤 Analizando frecuencia de palabras...")
             
@@ -267,10 +382,10 @@ class WikiDataAnalyzer:
             # Calcular total de repeticiones por palabra
             word_totals = word_freq.groupBy("word").agg(
                 sum("frequency").alias("total_repetitions")
-            )
+            ).distinct()
             
-            # Guardar palabras únicas
-            if not self.save_to_mysql(word_totals, "Word", mode="append"):
+            # Guardar palabras usando INSERT IGNORE
+            if not self.save_words_safely(word_totals):
                 return False
             
             # Leer IDs de las páginas desde MySQL
@@ -301,10 +416,10 @@ class WikiDataAnalyzer:
                     col("w.id_word"),
                     col("p.id_page"),
                     col("wf.frequency").alias("quantity")
-                )
+                ).distinct().coalesce(1)
             
-            # Guardar relación TopWordPages
-            if not self.save_to_mysql(top_word_pages, "TopWordPages", mode="append"):
+            # Guardar relación TopWordPages usando INSERT IGNORE
+            if not self.save_to_mysql_with_ignore(top_word_pages, "TopWordPages"):
                 return False
             
             logger.info("✅ Análisis de frecuencia de palabras completado")
@@ -312,6 +427,52 @@ class WikiDataAnalyzer:
             
         except Exception as e:
             logger.error(f"❌ Error en análisis de palabras: {e}")
+            return False
+    
+    def save_words_safely(self, word_df):
+        """Guardar palabras usando INSERT IGNORE con manejo manual"""
+        try:
+            import mysql.connector
+            from mysql.connector import Error
+            
+            # Obtener conexión directa a MySQL
+            connection = mysql.connector.connect(
+                host=self.mysql_config['host'],
+                port=self.mysql_config['port'],
+                user=self.mysql_config['user'],
+                password=self.mysql_config['password'],
+                database=self.mysql_config['database']
+            )
+            
+            cursor = connection.cursor()
+            
+            # Recopilar todas las palabras
+            words_list = [row.asDict() for row in word_df.collect()]
+            
+            # Insertar usando INSERT IGNORE
+            insert_query = """
+            INSERT IGNORE INTO Word (word, total_repetitions) 
+            VALUES (%s, %s)
+            """
+            
+            # Preparar datos para inserción
+            words_data = [(word['word'], word['total_repetitions']) for word in words_list]
+            
+            # Ejecutar inserción por lotes
+            cursor.executemany(insert_query, words_data)
+            connection.commit()
+            
+            logger.info(f"✅ {len(words_data)} palabras procesadas (duplicados ignorados)")
+            
+            cursor.close()
+            connection.close()
+            return True
+            
+        except Error as e:
+            logger.error(f"❌ Error en MySQL: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"❌ Error guardando palabras: {e}")
             return False
     
     def analyze_bigrams(self, df):
@@ -352,10 +513,10 @@ class WikiDataAnalyzer:
                 .withColumnRenamed("count", "repetition_count")
             
             # Obtener sets únicos de 2 palabras
-            unique_bigrams = bigram_freq.select("word1", "word2").distinct()
+            unique_bigrams = bigram_freq.select("word1", "word2").distinct().coalesce(1)
             
-            # Guardar sets de 2 palabras
-            if not self.save_to_mysql(unique_bigrams, "SetWords2", mode="append"):
+            # Guardar sets de 2 palabras con manejo de duplicados
+            if not self.save_to_mysql_with_ignore(unique_bigrams, "SetWords2"):
                 return False
             
             # Leer datos desde MySQL para obtener IDs
@@ -386,10 +547,10 @@ class WikiDataAnalyzer:
                     col("sw2.id_set2"),
                     col("p.id_page"),
                     col("bf.repetition_count")
-                )
+                ).distinct().coalesce(1)
             
             # Guardar relación Top2WordsPages
-            if not self.save_to_mysql(top_bigram_pages, "Top2WordsPages", mode="append"):
+            if not self.save_to_mysql_with_ignore(top_bigram_pages, "Top2WordsPages"):
                 return False
             
             logger.info("✅ Análisis de bigramas completado")
@@ -440,10 +601,10 @@ class WikiDataAnalyzer:
                 .withColumnRenamed("count", "repetition_count")
             
             # Obtener sets únicos de 3 palabras
-            unique_trigrams = trigram_freq.select("word1", "word2", "word3").distinct()
+            unique_trigrams = trigram_freq.select("word1", "word2", "word3").distinct().coalesce(1)
             
-            # Guardar sets de 3 palabras
-            if not self.save_to_mysql(unique_trigrams, "SetWords3", mode="append"):
+            # Guardar sets de 3 palabras con manejo de duplicados
+            if not self.save_to_mysql_with_ignore(unique_trigrams, "SetWords3"):
                 return False
             
             # Leer datos desde MySQL
@@ -476,10 +637,10 @@ class WikiDataAnalyzer:
                     col("sw3.id_set3"),
                     col("p.id_page"),
                     col("tf.repetition_count")
-                )
+                ).distinct().coalesce(1)
             
             # Guardar relación Top3WordsPages
-            if not self.save_to_mysql(top_trigram_pages, "Top3WordsPages", mode="append"):
+            if not self.save_to_mysql_with_ignore(top_trigram_pages, "Top3WordsPages"):
                 return False
             
             logger.info("✅ Análisis de trigramas completado")
@@ -538,7 +699,6 @@ class WikiDataAnalyzer:
 
         try:
             logger.info("🔍 Analizando páginas TOP10 por trigramas compartidos...")
-            # Aquí iría la lógica para analizar las páginas TOP10 por trigramas compartidos
 
             # Explota los trigramas y los convierte a string
             df_exploded = df.select("url", explode(col("trigrams")).alias("trigram_str"))
