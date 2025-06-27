@@ -851,21 +851,19 @@ class WikiDataAnalyzer:
                 return False
             
             # 5. Analizar TOP10 páginas por bigramas compartidos
-            if not self.analyze_TOP10Pages_by_shared_bigrams(df):
-                logger.error("❌ Falló el análisis de TOP10 páginas por bigramas compartidos")
-                return False    
+            #if not self.analyze_TOP10Pages_by_shared_bigrams(df):
+                #logger.error("❌ Falló el análisis de TOP10 páginas por bigramas compartidos")
+                #return False    
             
             # 6. Analizar TOP10 páginas por trigramas compartidos
-            if not self.analyze_TOP10Pages_by_shared_trigrams(df):
-                logger.error("❌ Falló el análisis de TOP10 páginas por trigramas compartidos")
-                return False
+            #if not self.analyze_TOP10Pages_by_shared_trigrams(df):
+                #logger.error("❌ Falló el análisis de TOP10 páginas por trigramas compartidos")
+                #return False
             
             # 7. Análisis de palabras por página
-            if not self.ForEach_Page_Words(df):
-                logger.error("❌ Falló el análisis de palabras por página")
-                return False
-            
-
+            #if not self.ForEach_Page_Words(df):
+                #logger.error("❌ Falló el análisis de palabras por página")
+                #return False
             
             self.spark.stop()
             

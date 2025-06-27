@@ -19,14 +19,14 @@ BEGIN
     SELECT JSON_ARRAYAGG(JSON_OBJECT(
         'TITLE', p.title,
         'URL', p.url,
-        'QUANTITY', pxw.quantity
+        'QUANTITY', twp.quantity
     ))
     INTO result
     FROM Page p
-    JOIN PageXWord pxw ON pxw.id_page = p.id_page
-    JOIN Word w ON pxw.id_word = w.id_word
+    JOIN TopWordPages twp ON twp.id_page = p.id_page
+    JOIN Word w ON twp.id_word = w.id_word
     WHERE LOWER(w.word) = LOWER(pvWord)
-    ORDER BY pxw.quantity DESC;
+    ORDER BY twp.quantity DESC;
     
     RETURN result;
 END $$

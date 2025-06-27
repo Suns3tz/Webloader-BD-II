@@ -29,6 +29,8 @@ services:
       - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
       - SPARK_SSL_ENABLED=no
       - SPARK_DAEMON_JAVA_OPTS=-Djava.library.path=/opt/bitnami/spark/lib
+      - SPARK_DRIVER_MEMORY=2g
+      - SPARK_EXECUTOR_MEMORY=2g
     ports:
       - "8080:8080"  # Spark UI
       - "7077:7077"  # Spark Master
