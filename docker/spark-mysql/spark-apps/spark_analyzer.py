@@ -277,13 +277,12 @@ class WikiDataAnalyzer:
             logger.error(f"❌ Error guardando en MySQL tabla {table_name}: {e}")
             return False
     
-    def save_to_mysql_with_ignore(self, df, table_name):
+    def save_to_mysql_with_ignore(self, df, table_name, batch_size=1000):
         """Guardar DataFrame en MySQL usando INSERT IGNORE para manejar duplicados"""
         try:
             import mysql.connector
             from mysql.connector import Error
-            
-            # Obtener conexión directa a MySQL
+
             connection = mysql.connector.connect(
                 host=self.mysql_config['host'],
                 port=self.mysql_config['port'],
@@ -291,30 +290,10 @@ class WikiDataAnalyzer:
                 password=self.mysql_config['password'],
                 database=self.mysql_config['database']
             )
-            
             cursor = connection.cursor()
-            
-            # Recopilar todas las filas
             rows_list = [row.asDict() for row in df.collect()]
-            
-            if table_name == "SetWords2":
-                # Insertar bigramas usando INSERT IGNORE
-                insert_query = """
-                INSERT IGNORE INTO SetWords2 (word1, word2) 
-                VALUES (%s, %s)
-                """
-                data_tuples = [(row['word1'], row['word2']) for row in rows_list]
-                
-            elif table_name == "SetWords3":
-                # Insertar trigramas usando INSERT IGNORE
-                insert_query = """
-                INSERT IGNORE INTO SetWords3 (word1, word2, word3) 
-                VALUES (%s, %s, %s)
-                """
-                data_tuples = [(row['word1'], row['word2'], row['word3']) for row in rows_list]
-                
-            elif table_name == "TopWordPages":
-                # Insertar relación TopWordPages usando INSERT IGNORE
+
+            if table_name == "TopWordPages":
                 insert_query = """
                 INSERT IGNORE INTO TopWordPages (id_word, id_page, quantity) 
                 VALUES (%s, %s, %s)
@@ -337,20 +316,37 @@ class WikiDataAnalyzer:
                 """
                 data_tuples = [(row['id_set3'], row['id_page'], row['repetition_count']) for row in rows_list]
                 
+            elif table_name == "SetWords2":
+                # Insertar bigramas usando INSERT IGNORE
+                insert_query = """
+                INSERT IGNORE INTO SetWords2 (word1, word2) 
+                VALUES (%s, %s)
+                """
+                data_tuples = [(row['word1'], row['word2']) for row in rows_list]
+                
+            elif table_name == "SetWords3":
+                # Insertar trigramas usando INSERT IGNORE
+                insert_query = """
+                INSERT IGNORE INTO SetWords3 (word1, word2, word3) 
+                VALUES (%s, %s, %s)
+                """
+                data_tuples = [(row['word1'], row['word2'], row['word3']) for row in rows_list]
+                
             else:
                 logger.error(f"❌ Tabla {table_name} no soportada en save_to_mysql_with_ignore")
                 return False
             
-            # Ejecutar inserción por lotes
-            if data_tuples:
-                cursor.executemany(insert_query, data_tuples)
+            # Inserta en lotes pequeños
+            for i in range(0, len(data_tuples), batch_size):
+                batch = data_tuples[i:i+batch_size]
+                cursor.executemany(insert_query, batch)
                 connection.commit()
-                logger.info(f"✅ {len(data_tuples)} registros procesados en tabla {table_name} (duplicados ignorados)")
-            
+
+            logger.info(f"✅ {len(data_tuples)} registros procesados en tabla {table_name} (duplicados ignorados)")
             cursor.close()
             connection.close()
             return True
-            
+
         except Error as e:
             logger.error(f"❌ Error en MySQL para tabla {table_name}: {e}")
             return False
@@ -649,52 +645,77 @@ class WikiDataAnalyzer:
         except Exception as e:
             logger.error(f"❌ Error en análisis de trigramas: {e}")
             return False
+<<<<<<< HEAD
     
+=======
 
+>>>>>>> a0fd898119c7e7c60ec9ae2b7dd982323294457f
     def analyze_TOP10Pages_by_shared_bigrams(self, df):
-
         try:
             logger.info("🔍 Analizando páginas TOP10 por bigramas compartidos...")
-            # Aquí iría la lógica para analizar las páginas TOP10 por bigramas compartidos
-            
-            # Explota los bigramas y los convierte a string
-            df_exploded = df.select("url", explode(col("bigrams")).alias("bigram_str"))
 
-            # Relaciona páginas que comparten bigramas
+            # Validación inicial
+            if df is None or df.rdd.isEmpty():
+                logger.warning("⚠️ DataFrame vacío o nulo.")
+                return False
+
+            # Filtrar filas con bigrams y URL válidas
+            df_filtered = df.filter(col("url").isNotNull() & col("bigrams").isNotNull())
+
+            # Explota los bigramas
+            df_exploded = df_filtered.select(
+                col("url"),
+                explode(col("bigrams")).alias("bigram_str")
+            ).filter(col("bigram_str").isNotNull() & (length(col("bigram_str")) > 0))
+
+            if df_exploded.rdd.isEmpty():
+                logger.warning("⚠️ No hay bigramas válidos para analizar.")
+                return True
+
+            # Evita combinaciones duplicadas (A-B y B-A)
             joined = df_exploded.alias("a").join(
                 df_exploded.alias("b"),
-                (col("a.bigram_str") == col("b.bigram_str")) & (col("a.url") != col("b.url"))
+                (col("a.bigram_str") == col("b.bigram_str")) & (col("a.url") < col("b.url"))
             ).select(
                 col("a.url").alias("page1_url"),
                 col("b.url").alias("page2_url"),
                 col("a.bigram_str")
             ).distinct()
 
-            # Cuenta cuántos bigramas comparten cada par de páginas
-            shared_counts = joined.groupBy("page1_url", "page2_url").agg(count("bigram_str").alias("shared_sets_count"))
+            # Agrupar por pares y contar coincidencias
+            shared_counts = joined.groupBy("page1_url", "page2_url") \
+                .agg(count("bigram_str").alias("shared_sets_count"))
 
-            # Top 10 de páginas que más bigramas comparten con cada página
+            # Top 10 por página
             window = Window.partitionBy("page1_url").orderBy(desc("shared_sets_count"))
-            top10 = shared_counts.withColumn("rank", row_number().over(window)).filter(col("rank") <= 10)
+            top10 = shared_counts.withColumn("rank", row_number().over(window)) \
+                .filter(col("rank") <= 10)
 
-            page_df = self.spark.read.jdbc(url=self.mysql_url, table="Page", properties=self.mysql_properties).select("id_page", "url")
+            # Cargar IDs desde MySQL
+            page_df = self.spark.read.jdbc(
+                url=self.mysql_url, table="Page", properties=self.mysql_properties
+            ).select("id_page", "url")
 
             top10_ids = top10 \
                 .join(page_df.withColumnRenamed("id_page", "id_page1").withColumnRenamed("url", "page1_url"), on="page1_url") \
                 .join(page_df.withColumnRenamed("id_page", "id_page2").withColumnRenamed("url", "page2_url"), on="page2_url") \
-                .select("id_page1", "id_page2", "shared_sets_count") \
+                .select("id_page1", "id_page2", "shared_sets_count")
 
             if not self.save_to_mysql(top10_ids, "Sets2PageXPage", mode="append"):
                 return False
-            
+
+            logger.info("✅ Análisis de TOP10 páginas por bigramas compartidos completado")
             return True
-        
+
         except Exception as e:
             logger.error(f"❌ Error en análisis de páginas TOP10 por bigramas compartidos: {e}")
+<<<<<<< HEAD
+            return False         
+               
+=======
             return False
-            
         
-        
+>>>>>>> a0fd898119c7e7c60ec9ae2b7dd982323294457f
     def analyze_TOP10Pages_by_shared_trigrams(self, df):
 
         try:
@@ -735,8 +756,6 @@ class WikiDataAnalyzer:
         except Exception as e:
             logger.error(f"❌ Error en análisis de páginas TOP10 por trigramas compartidos: {e}")
             return False
-
-
 
     def ForEach_Page_Words(self, df):
         """Realiza un análisis de palabras para cada página"""
@@ -781,6 +800,194 @@ class WikiDataAnalyzer:
             return True
         except Exception as e:
             logger.error(f"❌ Error en análisis de palabras por página: {e}")
+            return False
+
+    def analyze_word_percentage_per_page(self, df):
+        "Calcula el porcentaje de cada palabra en el texto total de la página y guarda en PageXWord"
+        try:
+            logger.info("📈 Calculando porcentaje de palabras por página...")
+
+            # Explotar palabras y contar por página
+            word_page_df = df.select(
+                col("title").alias("page_title"),
+                col("url").alias("page_url"),
+                explode(coalesce(col("word_list"), array())).alias("word")
+            ).filter(col("word").isNotNull() & (col("word") != ""))
+
+            # Total de palabras por página
+            total_words_per_page = word_page_df.groupBy("page_title", "page_url").count().withColumnRenamed("count", "total_words")
+
+            # Frecuencia de cada palabra por página
+            word_freq = word_page_df.groupBy("word", "page_title", "page_url").count().withColumnRenamed("count", "quantity")
+
+            # Unir para calcular porcentaje
+            joined = word_freq.join(
+                total_words_per_page,
+                on=["page_title", "page_url"]
+            ).withColumn(
+                "percentage", col("quantity") / col("total_words")
+            )
+
+            # Leer IDs desde MySQL
+            pages_mysql = self.spark.read.format("jdbc") \
+                .option("url", f"jdbc:mysql://{self.mysql_config['host']}:{self.mysql_config['port']}/{self.mysql_config['database']}") \
+                .option("dbtable", "Page") \
+                .option("user", self.mysql_config['user']) \
+                .option("password", self.mysql_config['password']) \
+                .option("driver", "com.mysql.cj.jdbc.Driver") \
+                .load()
+            words_mysql = self.spark.read.format("jdbc") \
+                .option("url", f"jdbc:mysql://{self.mysql_config['host']}:{self.mysql_config['port']}/{self.mysql_config['database']}") \
+                .option("dbtable", "Word") \
+                .option("user", self.mysql_config['user']) \
+                .option("password", self.mysql_config['password']) \
+                .option("driver", "com.mysql.cj.jdbc.Driver") \
+                .load()
+
+            # Relacionar con IDs
+            result = joined.alias("j") \
+                .join(pages_mysql.alias("p"), col("j.page_title") == col("p.title")) \
+                .join(words_mysql.alias("w"), col("j.word") == col("w.word")) \
+                .select(
+                    col("p.id_page"),
+                    col("w.id_word"),
+                    col("j.percentage"),
+                    col("j.quantity")
+                )
+
+            # Guardar en PageXWord
+            if not self.save_to_mysql(result, "PageXWord", mode="append"):
+                return False
+
+            logger.info("✅ Porcentaje de palabras por página calculado y guardado")
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Error en porcentaje de palabras: {e}")
+            return False
+
+    def analyze_word_frequency_in_links(self, df):
+        """Cuenta cuántas veces se repite cada palabra en los textos de los links de todas las páginas y guarda en Word.total_repetitions"""
+        try:
+            logger.info("🔗 Analizando frecuencia de palabras en los textos de los links de todas las páginas...")
+
+            # Obtener todas las páginas enlazadas
+            page_links_df = df.select(
+                explode(coalesce(col("links"), array())).alias("linked_url")
+            )
+
+            # Unir para obtener el word_list de cada página enlazada
+            links_words_df = page_links_df.join(
+                df.select(
+                    col("url").alias("linked_url"),
+                    col("word_list")
+                ),
+                on="linked_url",
+                how="inner"
+            )
+
+            # Explotar palabras de los links
+            words_in_links = links_words_df.select(
+                explode(coalesce(col("word_list"), array())).alias("word")
+            ).filter(col("word").isNotNull() & (col("word") != ""))
+
+            # Contar frecuencia global de cada palabra en los links
+            word_counts = words_in_links.groupBy("word").count().withColumnRenamed("count", "total_repetitions")
+
+            # Guardar en Word (sobrescribe para mantener actualizado)
+            if not self.save_words_safely(word_counts):
+                return False
+
+            logger.info("✅ Frecuencia de palabras en links calculada y guardada en Word.total_repetitions")
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Error en frecuencia de palabras en links: {e}")
+            return False
+
+    def analyze_repeated_links(self, df):
+        """Cuenta cuántas veces se repite cada link en todos los links de todas las páginas y guarda en Page.total_repetitions"""
+        try:
+            logger.info("🔗 Analizando links repetidos en todas las páginas...")
+
+            # Explotar todos los links
+            all_links = df.select(
+                explode(coalesce(col("links"), array())).alias("link_url")
+            ).filter(col("link_url").isNotNull() & (col("link_url") != ""))
+
+            # Contar repeticiones de cada link
+            link_counts = all_links.groupBy("link_url").count().withColumnRenamed("count", "total_repetitions")
+
+            # Leer tabla Page
+            pages_mysql = self.spark.read.format("jdbc") \
+                .option("url", f"jdbc:mysql://{self.mysql_config['host']}:{self.mysql_config['port']}/{self.mysql_config['database']}") \
+                .option("dbtable", "Page") \
+                .option("user", self.mysql_config['user']) \
+                .option("password", self.mysql_config['password']) \
+                .option("driver", "com.mysql.cj.jdbc.Driver") \
+                .load()
+
+            # Unir para actualizar el campo total_repetitions de cada página (por url)
+            updated_pages = pages_mysql.join(
+                link_counts, pages_mysql.url == link_counts.link_url, "left"
+            ).select(
+                pages_mysql["*"],
+                link_counts["total_repetitions"]
+            )
+
+            # Guardar en Page (actualiza solo el campo total_repetitions)
+            if not self.update_page_total_repetitions(updated_pages):
+                return False
+
+            logger.info("✅ Links repetidos contados y guardados en Page.total_repetitions")
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Error en links repetidos: {e}")
+            return False
+
+    def update_page_total_repetitions(self, updated_pages_df):
+        """Actualiza el campo total_repetitions de la tabla Page de forma segura (por url)"""
+        try:
+            import mysql.connector
+            from mysql.connector import Error
+
+            # Recopilar los datos a actualizar
+            rows_list = [row.asDict() for row in updated_pages_df.collect()]
+
+            # Conectar a MySQL
+            connection = mysql.connector.connect(
+                host=self.mysql_config['host'],
+                port=self.mysql_config['port'],
+                user=self.mysql_config['user'],
+                password=self.mysql_config['password'],
+                database=self.mysql_config['database']
+            )
+            cursor = connection.cursor()
+
+            # Preparar y ejecutar UPDATE para cada página
+            update_query = """
+            UPDATE Page SET total_repetitions = %s WHERE url = %s
+            """
+            data_tuples = []
+            for row in rows_list:
+                # Si no hay valor, poner 0
+                total_repetitions = row.get('total_repetitions')
+                if total_repetitions is None:
+                    total_repetitions = 0
+                data_tuples.append((total_repetitions, row['url']))
+            if data_tuples:
+                cursor.executemany(update_query, data_tuples)
+                connection.commit()
+                logger.info(f"✅ {len(data_tuples)} páginas actualizadas (total_repetitions)")
+            cursor.close()
+            connection.close()
+            return True
+        except Error as e:
+            logger.error(f"❌ Error en MySQL al actualizar Page: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"❌ Error actualizando Page: {e}")
             return False
 
     def verify_hdfs_connection(self):
@@ -835,7 +1042,7 @@ class WikiDataAnalyzer:
                 logger.error("❌ Falló el análisis de páginas")
                 return False
             
-            # 2. Analizar palabras
+            # # 2. Analizar palabras
             if not self.analyze_word_frequency(df):
                 logger.error("❌ Falló el análisis de palabras")
                 return False
@@ -847,24 +1054,56 @@ class WikiDataAnalyzer:
             
             # 4. Analizar trigramas
             if not self.analyze_trigrams(df):
-                logger.error("❌ Falló el análisis de trigramas")
-                return False
+               logger.error("❌ Falló el análisis de trigramas")
+               return False
             
+<<<<<<< HEAD
+            # # 5. Analizar TOP10 páginas por bigramas compartidos
+            # if not self.analyze_TOP10Pages_by_shared_bigrams(df):
+            #     logger.error("❌ Falló el análisis de TOP10 páginas por bigramas compartidos")
+            #     return False    
+            
+            # # 6. Analizar TOP10 páginas por trigramas compartidos
+            # if not self.analyze_TOP10Pages_by_shared_trigrams(df):
+            #     logger.error("❌ Falló el análisis de TOP10 páginas por trigramas compartidos")
+            #     return False
+            
+            # # 7. Análisis de palabras por página
+            # if not self.ForEach_Page_Words(df):
+            #     logger.error("❌ Falló el análisis de palabras por página")
+            #     return False
+=======
             # 5. Analizar TOP10 páginas por bigramas compartidos
             #if not self.analyze_TOP10Pages_by_shared_bigrams(df):
-                #logger.error("❌ Falló el análisis de TOP10 páginas por bigramas compartidos")
-                #return False    
+            #    logger.error("❌ Falló el análisis de TOP10 páginas por bigramas compartidos")
+            #    return False    
             
             # 6. Analizar TOP10 páginas por trigramas compartidos
             #if not self.analyze_TOP10Pages_by_shared_trigrams(df):
-                #logger.error("❌ Falló el análisis de TOP10 páginas por trigramas compartidos")
-                #return False
+            #    logger.error("❌ Falló el análisis de TOP10 páginas por trigramas compartidos")
+            #    return False
             
             # 7. Análisis de palabras por página
             #if not self.ForEach_Page_Words(df):
-                #logger.error("❌ Falló el análisis de palabras por página")
-                #return False
+            #    logger.error("❌ Falló el análisis de palabras por página")
+            #    return False
+>>>>>>> a0fd898119c7e7c60ec9ae2b7dd982323294457f
             
+            # 8. Porcentaje de palabras por página
+            if not self.analyze_word_percentage_per_page(df):
+                logger.error("❌ Falló el análisis de porcentaje de palabras por página")
+                return False
+
+            # 10. Frecuencia de palabras en links
+            if not self.analyze_word_frequency_in_links(df):
+                logger.error("❌ Falló el análisis de palabras en links")
+                return False
+
+            # 11. Links repetidos
+            if not self.analyze_repeated_links(df):
+                logger.error("❌ Falló el análisis de links repetidos")
+                return False
+
             self.spark.stop()
             
             logger.info("🎉 Análisis completo terminado exitosamente")
