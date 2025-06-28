@@ -645,11 +645,8 @@ class WikiDataAnalyzer:
         except Exception as e:
             logger.error(f"❌ Error en análisis de trigramas: {e}")
             return False
-<<<<<<< HEAD
     
-=======
 
->>>>>>> a0fd898119c7e7c60ec9ae2b7dd982323294457f
     def analyze_TOP10Pages_by_shared_bigrams(self, df):
         try:
             logger.info("🔍 Analizando páginas TOP10 por bigramas compartidos...")
@@ -709,13 +706,10 @@ class WikiDataAnalyzer:
 
         except Exception as e:
             logger.error(f"❌ Error en análisis de páginas TOP10 por bigramas compartidos: {e}")
-<<<<<<< HEAD
-            return False         
-               
-=======
             return False
+            
         
->>>>>>> a0fd898119c7e7c60ec9ae2b7dd982323294457f
+        
     def analyze_TOP10Pages_by_shared_trigrams(self, df):
 
         try:
@@ -1085,25 +1079,9 @@ class WikiDataAnalyzer:
             
             # 7. Análisis de palabras por página
             #if not self.ForEach_Page_Words(df):
-            #    logger.error("❌ Falló el análisis de palabras por página")
-            #    return False
->>>>>>> a0fd898119c7e7c60ec9ae2b7dd982323294457f
+                #logger.error("❌ Falló el análisis de palabras por página")
+                #return False
             
-            # 8. Porcentaje de palabras por página
-            if not self.analyze_word_percentage_per_page(df):
-                logger.error("❌ Falló el análisis de porcentaje de palabras por página")
-                return False
-
-            # 10. Frecuencia de palabras en links
-            if not self.analyze_word_frequency_in_links(df):
-                logger.error("❌ Falló el análisis de palabras en links")
-                return False
-
-            # 11. Links repetidos
-            if not self.analyze_repeated_links(df):
-                logger.error("❌ Falló el análisis de links repetidos")
-                return False
-
             self.spark.stop()
             
             logger.info("🎉 Análisis completo terminado exitosamente")

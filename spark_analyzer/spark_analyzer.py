@@ -645,7 +645,6 @@ class WikiDataAnalyzer:
         except Exception as e:
             logger.error(f"❌ Error en análisis de trigramas: {e}")
             return False
-    
 
     def analyze_TOP10Pages_by_shared_bigrams(self, df):
         try:
@@ -706,7 +705,9 @@ class WikiDataAnalyzer:
 
         except Exception as e:
             logger.error(f"❌ Error en análisis de páginas TOP10 por bigramas compartidos: {e}")
-            return False    
+            return False
+            
+        
         
     def analyze_TOP10Pages_by_shared_trigrams(self, df):
 
@@ -1051,19 +1052,34 @@ class WikiDataAnalyzer:
             
             # 5. Analizar TOP10 páginas por bigramas compartidos
             #if not self.analyze_TOP10Pages_by_shared_bigrams(df):
-                #logger.error("❌ Falló el análisis de TOP10 páginas por bigramas compartidos")
-                #return False    
+            #    logger.error("❌ Falló el análisis de TOP10 páginas por bigramas compartidos")
+            #    return False    
             
             # 6. Analizar TOP10 páginas por trigramas compartidos
             #if not self.analyze_TOP10Pages_by_shared_trigrams(df):
-                #logger.error("❌ Falló el análisis de TOP10 páginas por trigramas compartidos")
-                #return False
+            #    logger.error("❌ Falló el análisis de TOP10 páginas por trigramas compartidos")
+            #    return False
             
             # 7. Análisis de palabras por página
             #if not self.ForEach_Page_Words(df):
-                #logger.error("❌ Falló el análisis de palabras por página")
-                #return False
+            #    logger.error("❌ Falló el análisis de palabras por página")
+            #    return False
             
+            # 8. Porcentaje de palabras por página
+            if not self.analyze_word_percentage_per_page(df):
+                logger.error("❌ Falló el análisis de porcentaje de palabras por página")
+                return False
+
+            # 10. Frecuencia de palabras en links
+            if not self.analyze_word_frequency_in_links(df):
+                logger.error("❌ Falló el análisis de palabras en links")
+                return False
+
+            # 11. Links repetidos
+            if not self.analyze_repeated_links(df):
+                logger.error("❌ Falló el análisis de links repetidos")
+                return False
+
             self.spark.stop()
             
             logger.info("🎉 Análisis completo terminado exitosamente")
