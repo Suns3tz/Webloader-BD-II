@@ -645,7 +645,6 @@ class WikiDataAnalyzer:
         except Exception as e:
             logger.error(f"❌ Error en análisis de trigramas: {e}")
             return False
-    
 
     def analyze_TOP10Pages_by_shared_bigrams(self, df):
         try:
@@ -706,10 +705,8 @@ class WikiDataAnalyzer:
 
         except Exception as e:
             logger.error(f"❌ Error en análisis de páginas TOP10 por bigramas compartidos: {e}")
-            return False
-            
-        
-        
+            return False         
+              
     def analyze_TOP10Pages_by_shared_trigrams(self, df):
 
         try:
@@ -858,6 +855,214 @@ class WikiDataAnalyzer:
 
         except Exception as e:
             logger.error(f"❌ Error en porcentaje de palabras: {e}")
+            return False
+
+    def analyze_link_graph_connections(self, df):
+        """Análisis #9: Crear grafo de conexiones entre enlaces para identificar tópicos más interconectados"""
+        try:
+            logger.info("🔗 Analizando grafo de conexiones entre enlaces...")
+
+            # Validación inicial del DataFrame
+            if df is None or df.rdd.isEmpty():
+                logger.warning("⚠️ DataFrame vacío o nulo para análisis de grafo")
+                return True
+
+            # Filtrar páginas con enlaces válidos
+            pages_with_links = df.select(
+                col("url").alias("source_page"),
+                col("title").alias("source_title"),
+                explode(coalesce(col("links"), array())).alias("target_page")
+            ).filter(
+                col("source_page").isNotNull() & 
+                col("target_page").isNotNull() &
+                (col("source_page") != col("target_page"))  # Evitar auto-referencias
+            ).distinct()
+
+            if pages_with_links.rdd.isEmpty():
+                logger.warning("⚠️ No se encontraron conexiones válidas entre páginas")
+                return True
+
+            # Crear grafo bidireccional (A->B y B->A se cuentan como conexiones)
+            connections = pages_with_links.select(
+                col("source_page"),
+                col("target_page")
+            )
+
+            # Contar conexiones entrantes (in-degree) por página
+            incoming_connections = connections.groupBy("target_page") \
+                .agg(count("source_page").alias("incoming_links")) \
+                .withColumnRenamed("target_page", "page_url")
+
+            # Contar conexiones salientes (out-degree) por página
+            outgoing_connections = connections.groupBy("source_page") \
+                .agg(count("target_page").alias("outgoing_links")) \
+                .withColumnRenamed("source_page", "page_url")
+
+            # Calcular total de conexiones únicas por página
+            total_connections = connections.select("source_page").withColumnRenamed("source_page", "page_url") \
+                .union(connections.select("target_page").withColumnRenamed("target_page", "page_url")) \
+                .groupBy("page_url") \
+                .agg(count("*").alias("total_connections"))
+
+            # Calcular métricas de interconectividad
+            page_connectivity = df.select("url", "title").alias("pages") \
+                .join(incoming_connections.alias("inc"), col("pages.url") == col("inc.page_url"), "left") \
+                .join(outgoing_connections.alias("out"), col("pages.url") == col("out.page_url"), "left") \
+                .join(total_connections.alias("total"), col("pages.url") == col("total.page_url"), "left") \
+                .select(
+                    col("pages.url"),
+                    col("pages.title"),
+                    coalesce(col("inc.incoming_links"), lit(0)).alias("incoming_links"),
+                    coalesce(col("out.outgoing_links"), lit(0)).alias("outgoing_links"),
+                    coalesce(col("total.total_connections"), lit(0)).alias("total_connections"),
+                    (coalesce(col("inc.incoming_links"), lit(0)) + coalesce(col("out.outgoing_links"), lit(0))).alias("connectivity_score")
+                )
+
+            # Identificar páginas más interconectadas (Top tópicos)
+            top_connected_pages = page_connectivity.orderBy(desc("connectivity_score")).limit(20)
+
+            # Análisis de comunidades: páginas que comparten muchos enlaces
+            shared_links = connections.alias("c1") \
+                .join(connections.alias("c2"), 
+                      (col("c1.target_page") == col("c2.target_page")) & 
+                      (col("c1.source_page") < col("c2.source_page"))) \
+                .groupBy(col("c1.source_page").alias("page1_url"), col("c2.source_page").alias("page2_url")) \
+                .agg(count("c1.target_page").alias("shared_links_count")) \
+                .filter(col("shared_links_count") >= 2)  # Al menos 2 enlaces compartidos
+
+            # Guardar resultados del grafo de conectividad
+            if not self._save_connectivity_results(page_connectivity, top_connected_pages, shared_links):
+                return False
+
+            # Análisis de centralidad: páginas que actúan como "hubs"
+            hub_analysis = page_connectivity.withColumn(
+                "hub_score",
+                col("outgoing_links") * 0.6 + col("incoming_links") * 0.4
+            ).orderBy(desc("hub_score"))
+
+            # Guardar análisis de hubs
+            if not self._save_hub_analysis(hub_analysis.limit(15)):
+                return False
+
+            logger.info("✅ Análisis de grafo de conexiones completado")
+            logger.info(f"   - Total de conexiones analizadas: {connections.count()}")
+            logger.info(f"   - Páginas con conexiones: {page_connectivity.filter(col('connectivity_score') > 0).count()}")
+            
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Error en análisis de grafo de conexiones: {e}")
+            return False
+
+    def _save_connectivity_results(self, page_connectivity, top_connected_pages, shared_links):
+        """Guardar resultados del análisis de conectividad en MySQL"""
+        try:
+            # Leer IDs de páginas desde MySQL
+            pages_mysql = self.spark.read.format("jdbc") \
+                .option("url", f"jdbc:mysql://{self.mysql_config['host']}:{self.mysql_config['port']}/{self.mysql_config['database']}") \
+                .option("dbtable", "Page") \
+                .option("user", self.mysql_config['user']) \
+                .option("password", self.mysql_config['password']) \
+                .option("driver", "com.mysql.cj.jdbc.Driver") \
+                .load()
+
+            # Preparar datos de conectividad con IDs
+            connectivity_with_ids = page_connectivity.join(
+                pages_mysql.select("id_page", "url"),
+                page_connectivity.url == pages_mysql.url,
+                "inner"
+            ).select(
+                col("id_page"),
+                col("incoming_links"),
+                col("outgoing_links"), 
+                col("total_connections"),
+                col("connectivity_score")
+            )
+
+            # Actualizar estadísticas de conectividad en la tabla Page
+            if not self._update_page_connectivity_stats(connectivity_with_ids):
+                return False
+
+            # Guardar relaciones de páginas con enlaces compartidos
+            if shared_links.count() > 0:
+                shared_links_with_ids = shared_links.alias("sl") \
+                    .join(pages_mysql.alias("p1"), col("sl.page1_url") == col("p1.url")) \
+                    .join(pages_mysql.alias("p2"), col("sl.page2_url") == col("p2.url")) \
+                    .select(
+                        col("p1.id_page").alias("page1_id"),
+                        col("p2.id_page").alias("page2_id"),
+                        col("sl.shared_links_count")
+                    )
+
+                # Esto podría guardarse en una tabla personalizada de comunidades
+                logger.info(f"✅ Identificadas {shared_links.count()} relaciones de páginas con enlaces compartidos")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Error guardando resultados de conectividad: {e}")
+            return False
+
+    def _save_hub_analysis(self, hub_analysis):
+        """Guardar análisis de páginas hub (más centrales en el grafo)"""
+        try:
+            # Esta información podría ser útil para reportes o análisis posteriores
+            hub_count = hub_analysis.count()
+            logger.info(f"✅ Identificadas {hub_count} páginas hub principales")
+            
+            # Mostrar top 5 páginas hub para logging
+            top_hubs = hub_analysis.select("title", "hub_score", "outgoing_links", "incoming_links").limit(5).collect()
+            logger.info("🎯 Top 5 páginas hub:")
+            for idx, row in enumerate(top_hubs, 1):
+                logger.info(f"   {idx}. {row['title'][:50]}... (Score: {row['hub_score']:.2f})")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Error en análisis de hubs: {e}")
+            return False
+
+    def _update_page_connectivity_stats(self, connectivity_df):
+        """Actualizar estadísticas de conectividad en la tabla Page"""
+        try:
+            import mysql.connector
+            from mysql.connector import Error
+
+            # Recopilar datos para actualización
+            rows_list = [row.asDict() for row in connectivity_df.collect()]
+
+            # Conectar a MySQL
+            connection = mysql.connector.connect(
+                host=self.mysql_config['host'],
+                port=self.mysql_config['port'],
+                user=self.mysql_config['user'],
+                password=self.mysql_config['password'],
+                database=self.mysql_config['database']
+            )
+            cursor = connection.cursor()
+
+            # Verificar si existe una columna para connectivity_score, si no, podríamos usar un campo existente
+            # Por ahora, actualizaremos quant_diff_urls con el total_connections (más apropiado)
+            update_query = """
+            UPDATE Page SET quant_diff_urls = %s WHERE id_page = %s
+            """
+            
+            data_tuples = [(row['total_connections'], row['id_page']) for row in rows_list]
+            
+            if data_tuples:
+                cursor.executemany(update_query, data_tuples)
+                connection.commit()
+                logger.info(f"✅ {len(data_tuples)} páginas actualizadas con estadísticas de conectividad")
+
+            cursor.close()
+            connection.close()
+            return True
+
+        except Error as e:
+            logger.error(f"❌ Error en MySQL actualizando conectividad: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"❌ Error actualizando estadísticas de conectividad: {e}")
             return False
 
     def analyze_word_frequency_in_links(self, df):
@@ -1042,31 +1247,15 @@ class WikiDataAnalyzer:
                 return False
             
             # 3. Analizar bigramas
-            if not self.analyze_bigrams(df):
-                logger.error("❌ Falló el análisis de bigramas")
-                return False
+            # if not self.analyze_bigrams(df):
+            #     logger.error("❌ Falló el análisis de bigramas")
+            #     return False
             
             # 4. Analizar trigramas
-            if not self.analyze_trigrams(df):
-               logger.error("❌ Falló el análisis de trigramas")
-               return False
+            # if not self.analyze_trigrams(df):
+            #    logger.error("❌ Falló el análisis de trigramas")
+            #    return False
             
-<<<<<<< HEAD
-            # # 5. Analizar TOP10 páginas por bigramas compartidos
-            # if not self.analyze_TOP10Pages_by_shared_bigrams(df):
-            #     logger.error("❌ Falló el análisis de TOP10 páginas por bigramas compartidos")
-            #     return False    
-            
-            # # 6. Analizar TOP10 páginas por trigramas compartidos
-            # if not self.analyze_TOP10Pages_by_shared_trigrams(df):
-            #     logger.error("❌ Falló el análisis de TOP10 páginas por trigramas compartidos")
-            #     return False
-            
-            # # 7. Análisis de palabras por página
-            # if not self.ForEach_Page_Words(df):
-            #     logger.error("❌ Falló el análisis de palabras por página")
-            #     return False
-=======
             # 5. Analizar TOP10 páginas por bigramas compartidos
             #if not self.analyze_TOP10Pages_by_shared_bigrams(df):
             #    logger.error("❌ Falló el análisis de TOP10 páginas por bigramas compartidos")
@@ -1079,9 +1268,29 @@ class WikiDataAnalyzer:
             
             # 7. Análisis de palabras por página
             #if not self.ForEach_Page_Words(df):
-                #logger.error("❌ Falló el análisis de palabras por página")
-                #return False
+            #    logger.error("❌ Falló el análisis de palabras por página")
+            #    return False
             
+            # 8. Porcentaje de palabras por página
+            # if not self.analyze_word_percentage_per_page(df):
+            #     logger.error("❌ Falló el análisis de porcentaje de palabras por página")
+            #     return False
+
+            # 9. Grafo de conexiones entre enlaces
+            if not self.analyze_link_graph_connections(df):
+                logger.error("❌ Falló el análisis de grafo de conexiones")
+                return False
+
+            # 10. Frecuencia de palabras en links
+            # if not self.analyze_word_frequency_in_links(df):
+            #     logger.error("❌ Falló el análisis de palabras en links")
+            #     return False
+
+            # 11. Links repetidos
+            # if not self.analyze_repeated_links(df):
+            #     logger.error("❌ Falló el análisis de links repetidos")
+            #     return False
+
             self.spark.stop()
             
             logger.info("🎉 Análisis completo terminado exitosamente")

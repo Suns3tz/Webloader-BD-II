@@ -311,6 +311,18 @@ def get_available_words():
     
     return jsonify({'success': True, 'data': results})
 
+# Análisis #9: Endpoint para tópicos más interconectados por enlaces
+@app.route('/api/analysis/topic-connections')
+def get_topic_connections():
+    """Obtener los tópicos más interconectados basado en el grafo de enlaces"""
+    limit = request.args.get('limit', 20, type=int)
+    results = analysis_api.get_most_interconnected_topics(limit)
+    
+    if isinstance(results, dict) and 'error' in results:
+        return jsonify(results), 500
+    
+    return jsonify({'success': True, 'data': results})
+
 if __name__ == '__main__':
     print("📍 Servidor disponible en: http://localhost:5000")
     print("🐳 Estado Docker:", "✅ Conectado" if docker_service.is_available else "❌ No disponible")
