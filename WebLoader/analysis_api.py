@@ -187,3 +187,8 @@ class AnalysisAPI:
         except Error as e:
             logger.error(f"Error obteniendo palabras disponibles: {e}")
             return {'error': f'Error obteniendo palabras: {str(e)}'}
+
+    # Análisis #9: Conexiones de grafo de enlaces - Tópicos más interconectados
+    def get_most_interconnected_topics(self, limit=20):
+        """Obtener los tópicos (palabras/términos) más interconectados basado en las páginas que los contienen y sus enlaces"""
+        return self._execute_function('getTopInterconnectedPages', limit)

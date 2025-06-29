@@ -203,6 +203,14 @@ class WebLoaderApp {
                     <input type="url" id="queryUrl6" name="url" placeholder="https://ejemplo.com/pagina" required>
                     <p class="config-description">Función: getTotalRepetitionsByPage(url)</p>
                 </div>
+            `,
+            // Análisis #9: Tópicos más interconectados por enlaces
+            'topic_connections': `
+                <div class="config-item">
+                    <label for="queryLimit">Límite de resultados:</label>
+                    <input type="number" id="queryLimit" name="limit" min="5" max="50" value="20" required>
+                    <p class="config-description">Función: getTopInterconnectedPages(límite) - Tópicos más interconectados por enlaces entre páginas</p>
+                </div>
             `
         };
 
@@ -293,6 +301,12 @@ class WebLoaderApp {
                     endpoint = `/api/analysis/page-repetitions?url=${encodeURIComponent(url6)}`;
                     break;
                     
+                case 'topic_connections':
+                    const limit = formData.get('limit');
+                    if (!limit) throw new Error('Límite requerido');
+                    endpoint = `/api/analysis/topic-connections?limit=${encodeURIComponent(limit)}`;
+                    break;
+                    
                 default:
                     throw new Error('Tipo de consulta no válido');
             }
@@ -301,7 +315,13 @@ class WebLoaderApp {
             const result = await response.json();
 
             if (response.ok) {
-                this.displayQueryResults(this.getQueryTitle(queryType, formData), result);
+                // Crear objeto con parámetros de consulta
+                const queryParams = {};
+                for (let [key, value] of formData.entries()) {
+                    queryParams[key] = value;
+                }
+                
+                this.displayQueryResults(this.getQueryTitle(queryType, formData), result, queryParams);
             } else {
                 this.showModal('Error', result.error || 'Error al procesar la consulta');
             }
@@ -326,7 +346,8 @@ class WebLoaderApp {
             'page_links': `Conteo de links de: ${formData.get('url')}`,
             'page_percentages': `Porcentajes de palabras en: ${formData.get('url')}`,
             'word_repetitions': `Total repeticiones de: "${formData.get('word')}"`,
-            'page_repetitions': `Total repeticiones de: ${formData.get('url')}`
+            'page_repetitions': `Total repeticiones de: ${formData.get('url')}`,
+            'topic_connections': `Tópicos más interconectados por enlaces (top ${formData.get('limit')})`
         };
         
         return titles[queryType] || 'Resultados de la consulta';
@@ -389,18 +410,29 @@ class WebLoaderApp {
                 </div>
             </div>
         `;
-    }displayQueryResults(title, result) {
+    }displayQueryResults(title, result, queryParams = {}) {
         const resultsSection = document.getElementById('resultsSection');
         const resultsContent = document.getElementById('resultsContent');
         
         let content = `<h4>${title}</h4>`;
+        
+        // Mostrar elemento buscado si existe
+        const searchElement = this.extractSearchElement(queryParams);
+        if (searchElement) {
+            content += `
+                <div class="search-element-info">
+                    <strong>🔍 Elemento de búsqueda:</strong> 
+                    <span class="search-element">${searchElement}</span>
+                </div>
+            `;
+        }
         
         if (result.error) {
             content += `<div class="sql-error">❌ ${result.error}</div>`;
         } else if (result.success && result.data) {
             const data = result.data;
             if (Array.isArray(data) && data.length > 0) {
-                content += this.createSQLTable(data);
+                content += this.createEnhancedSQLTable(data);
             } else {
                 content += '<div class="sql-empty">No se encontraron resultados</div>';
             }
@@ -413,6 +445,20 @@ class WebLoaderApp {
         
         // Scroll to results
         resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    extractSearchElement(queryParams) {
+        // Extraer el elemento de búsqueda según el tipo de consulta
+        if (queryParams.word) return `"${queryParams.word}"`;
+        if (queryParams.word1 && queryParams.word2 && queryParams.word3) {
+            return `"${queryParams.word1}", "${queryParams.word2}", "${queryParams.word3}"`;
+        }
+        if (queryParams.word1 && queryParams.word2) {
+            return `"${queryParams.word1}", "${queryParams.word2}"`;
+        }
+        if (queryParams.url) return queryParams.url;
+        if (queryParams.limit) return `Top ${queryParams.limit} resultados`;
+        return null;
     }
 
     resetQueryForm() {
@@ -496,13 +542,41 @@ class WebLoaderApp {
 
     // ...existing code...
 
-    createSQLTable(data) {
+    createEnhancedSQLTable(data) {
         if (!data || data.length === 0) return '<div class="sql-empty">No hay datos disponibles</div>';
         
         // Obtener las keys del primer objeto para crear headers
         const keys = Object.keys(data[0]);
+        const tableId = 'results-table-' + Date.now();
         
-        let tableHTML = '<table class="sql-results-table"><thead><tr>';
+        let tableHTML = `
+            <div class="table-controls">
+                <div class="sort-controls">
+                    <label for="sortColumn">Ordenar por:</label>
+                    <select id="sortColumn" onchange="app.sortTable('${tableId}', this.value, document.getElementById('sortOrder').value)">
+                        <option value="">-- Seleccionar columna --</option>
+        `;
+        
+        // Agregar opciones de columnas
+        keys.forEach(key => {
+            const headerName = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            tableHTML += `<option value="${key}">${headerName}</option>`;
+        });
+        
+        tableHTML += `
+                    </select>
+                    <select id="sortOrder" onchange="app.sortTable('${tableId}', document.getElementById('sortColumn').value, this.value)">
+                        <option value="asc">Ascendente (A-Z / 1-9)</option>
+                        <option value="desc">Descendente (Z-A / 9-1)</option>
+                        <option value="alpha">Alfabético</option>
+                    </select>
+                </div>
+            </div>
+            <div class="table-container">
+                <table id="${tableId}" class="sql-results-table">
+                    <thead>
+                        <tr>
+        `;
         
         // Crear headers
         keys.forEach(key => {
@@ -512,22 +586,71 @@ class WebLoaderApp {
         
         tableHTML += '</tr></thead><tbody>';
         
-        // Crear filas
-        data.forEach(row => {
-            tableHTML += '<tr>';
+        // Crear filas con datos originales almacenados
+        data.forEach((row, index) => {
+            tableHTML += `<tr data-row-index="${index}">`;
             keys.forEach(key => {
                 let value = row[key];
-                // Formatear valores largos (URLs, títulos)
-                if (typeof value === 'string' && value.length > 50) {
-                    value = `<span title="${value}">${value.substring(0, 50)}...</span>`;
+                let displayValue = value;
+                
+                // Formatear valores largos (URLs, títulos) pero mantener valor original
+                if (typeof value === 'string' && value.length > 60) {
+                    displayValue = `<span title="${value}" class="truncated-text">${value.substring(0, 60)}...</span>`;
                 }
-                tableHTML += `<td>${value || '-'}</td>`;
+                
+                tableHTML += `<td data-value="${value || ''}">${displayValue || '-'}</td>`;
             });
             tableHTML += '</tr>';
         });
         
-        tableHTML += '</tbody></table>';
+        tableHTML += '</tbody></table></div>';
+        
         return tableHTML;
+    }
+
+    sortTable(tableId, column, order) {
+        if (!column || !order) return;
+        
+        const table = document.getElementById(tableId);
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        
+        // Obtener índice de la columna
+        const headers = Array.from(table.querySelectorAll('th'));
+        const columnIndex = headers.findIndex(header => 
+            header.textContent.toLowerCase().replace(/\s+/g, '_') === column.replace(/_/g, ' ').toLowerCase().replace(/\s+/g, '_')
+        );
+        
+        if (columnIndex === -1) return;
+        
+        rows.sort((a, b) => {
+            const aValue = a.children[columnIndex].getAttribute('data-value') || '';
+            const bValue = b.children[columnIndex].getAttribute('data-value') || '';
+            
+            // Detectar si es número
+            const aNum = parseFloat(aValue);
+            const bNum = parseFloat(bValue);
+            const isNumeric = !isNaN(aNum) && !isNaN(bNum);
+            
+            let comparison = 0;
+            
+            if (order === 'alpha') {
+                // Orden alfabético estricto
+                comparison = aValue.toString().localeCompare(bValue.toString());
+            } else if (isNumeric) {
+                // Orden numérico
+                comparison = aNum - bNum;
+            } else {
+                // Orden de texto
+                comparison = aValue.toString().localeCompare(bValue.toString(), undefined, { numeric: true });
+            }
+            
+            return order === 'desc' ? -comparison : comparison;
+        });
+        
+        // Reemplazar contenido del tbody
+        tbody.innerHTML = '';
+        rows.forEach(row => tbody.appendChild(row));
     }
 
     showLoadingModal(message) {

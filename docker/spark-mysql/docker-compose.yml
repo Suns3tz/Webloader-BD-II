@@ -14,6 +14,7 @@ services:
       - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./my.cnf:/etc/mysql/conf.d/my.cnf  # Montar configuración personalizada
     networks:
       - webloader-network  # Red compartida
 
@@ -29,6 +30,8 @@ services:
       - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
       - SPARK_SSL_ENABLED=no
       - SPARK_DAEMON_JAVA_OPTS=-Djava.library.path=/opt/bitnami/spark/lib
+      - SPARK_DRIVER_MEMORY=4g
+      - SPARK_EXECUTOR_MEMORY=4g
     ports:
       - "8080:8080"  # Spark UI
       - "7077:7077"  # Spark Master
