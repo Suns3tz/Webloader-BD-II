@@ -1,18 +1,18 @@
-print("🚀 Iniciando WebLoader - Análisis de Páginas Web")
+print("Iniciando WebLoader - Análisis de Páginas Web")
 
 try:
     from flask import Flask, render_template, jsonify, request
-    print("✅ Flask importado correctamente")
+    print("Flask importado correctamente")
 except ImportError as e:
-    print(f"❌ Error importando Flask: {e}")
+    print(f"Error importando Flask: {e}")
     exit(1)
 
 try:
     import docker
-    print("✅ Docker importado correctamente")
+    print("Docker importado correctamente")
 except ImportError as e:
-    print(f"❌ Error importando Docker: {e}")
-    print("⚠️ Continuando sin Docker...")
+    print(f"Error importando Docker: {e}")
+    print("Continuando sin Docker...")
     docker = None
 
 from datetime import datetime
@@ -28,7 +28,7 @@ app = Flask(__name__)
 class DockerService:
     def __init__(self):
         if docker is None:
-            print("⚠️ Docker module no disponible")
+            print("Docker module no disponible")
             self.client = None
             self.is_available = False
             return
@@ -38,9 +38,9 @@ class DockerService:
             # Test connection
             self.client.ping()
             self.is_available = True
-            print("✅ Docker conectado correctamente")
+            print("Docker conectado correctamente")
         except Exception as e:
-            print(f"⚠️ Docker no disponible: {e}")
+            print(f"Docker no disponible: {e}")
             self.client = None
             self.is_available = False
     
@@ -71,7 +71,7 @@ class DockerService:
         return status
 
 # Instancias globales
-print("🐳 Inicializando servicios...")
+print("Inicializando servicios...")
 docker_service = DockerService()
 analysis_api = AnalysisAPI()
 
@@ -324,18 +324,18 @@ def get_topic_connections():
     return jsonify({'success': True, 'data': results})
 
 if __name__ == '__main__':
-    print("📍 Servidor disponible en: http://localhost:5000")
-    print("🐳 Estado Docker:", "✅ Conectado" if docker_service.is_available else "❌ No disponible")
-    print("💾 Probando conexión a MySQL...")
+    print("Servidor disponible en: http://localhost:5000")
+    print("Estado Docker:", "Conectado" if docker_service.is_available else "❌ No disponible")
+    print("Probando conexión a MySQL...")
     
     # Probar conexión a base de datos al inicio
     test_summary = analysis_api.get_analysis_summary()
     if test_summary is not None:
-        print("✅ Conexión a MySQL exitosa")
-        print(f"📊 Datos disponibles: {test_summary}")
+        print("Conexión a MySQL exitosa")
+        print(f"Datos disponibles: {test_summary}")
     else:
-        print("⚠️ No se pudo conectar a MySQL o no hay datos disponibles")
-        print("💡 Ejecuta el análisis de Spark primero")
+        print("No se pudo conectar a MySQL o no hay datos disponibles")
+        print("Ejecuta el análisis de Spark primero")
     
     print("⏹️ Presiona Ctrl+C para detener")
     print("-" * 50)
@@ -343,5 +343,5 @@ if __name__ == '__main__':
     try:
         app.run(debug=True, host='0.0.0.0', port=5000)
     except Exception as e:
-        print(f"❌ Error iniciando servidor: {e}")
-        print("💡 Asegúrate de que el puerto 5000 esté libre")
+        print(f"Error iniciando servidor: {e}")
+        print("Asegúrate de que el puerto 5000 esté libre")

@@ -16,14 +16,14 @@ logger = logging.getLogger(__name__)
 class WikiDataAnalyzer:
     def __init__(self):
         self.spark = None
-        self.mysql_config = {
+        self.mysql_config = { # Datos de conexión a MySQL
             'host': 'mysql',
             'port': 3306,
             'user': 'pr',
             'password': 'pr',
             'database': 'proyecto02'
         }
-        self.mysql_url = f"jdbc:mysql://{self.mysql_config['host']}:{self.mysql_config['port']}/{self.mysql_config['database']}"
+        self.mysql_url = f"jdbc:mysql://{self.mysql_config['host']}:{self.mysql_config['port']}/{self.mysql_config['database']}" # URL de conexión a MySQL
         self.mysql_properties = {
             "user": self.mysql_config['user'],
             "password": self.mysql_config['password'],
@@ -32,7 +32,7 @@ class WikiDataAnalyzer:
 
     def init_spark(self):
         """Inicializar sesión de Spark"""
-        try:
+        try: # Configuración de Spark
             self.spark = SparkSession.builder \
                 .appName("WikiDataAnalyzer") \
                 .config("spark.sql.adaptive.enabled", "true") \
@@ -41,16 +41,16 @@ class WikiDataAnalyzer:
                 .getOrCreate()
             
             self.spark.sparkContext.setLogLevel("WARN")
-            logger.info("✅ Spark Session inicializada correctamente")
+            logger.info("Spark Session inicializada correctamente")
             return True
         except Exception as e:
-            logger.error(f"❌ Error inicializando Spark: {e}")
+            logger.error(f"Error inicializando Spark: {e}")
             return False
     
     def clear_tables(self):
         """Limpiar todas las tablas respetando claves foráneas"""
         try:
-            logger.info("🧹 Limpiando tablas MySQL...")
+            logger.info("Limpiando tablas MySQL...")
             
             mysql_url = f"jdbc:mysql://{self.mysql_config['host']}:{self.mysql_config['port']}/{self.mysql_config['database']}"
             properties = {
@@ -86,14 +86,14 @@ class WikiDataAnalyzer:
                         .option("createTableOptions", f"ENGINE=InnoDB") \
                         .option("beforeCommit", f"TRUNCATE TABLE {table}") \
                         .jdbc(url=mysql_url, table=table, properties=properties)
-                    logger.info(f"✅ Tabla {table} limpiada")
+                    logger.info(f"Tabla {table} limpiada")
                 except Exception as e:
-                    logger.warning(f"⚠️ No se pudo limpiar tabla {table}: {e}")
+                    logger.warning(f"No se pudo limpiar tabla {table}: {e}")
             
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error limpiando tablas: {e}")
+            logger.error(f"Error limpiando tablas: {e}")
             return False
     
     def execute_sql_directly(self, sql_command):
@@ -124,8 +124,8 @@ class WikiDataAnalyzer:
     def clear_tables_with_sql(self):
         """Limpiar tablas usando SQL directo"""
         try:
-            logger.info("🧹 Limpiando tablas con SQL directo...")
-            
+            logger.info("Limpiando tablas con SQL directo...")
+
             # Orden correcto para eliminar datos
             clear_commands = [
                 "DELETE FROM TopWordPages",
@@ -144,20 +144,20 @@ class WikiDataAnalyzer:
             all_commands = "; ".join(clear_commands)
             
             if self.execute_sql_directly(all_commands):
-                logger.info("✅ Todas las tablas limpiadas correctamente")
+                logger.info("Todas las tablas limpiadas correctamente")
                 return True
             else:
-                logger.error("❌ Error limpiando tablas")
+                logger.error("Error limpiando tablas")
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ Error en limpieza de tablas: {e}")
+            logger.error(f"Error en limpieza de tablas: {e}")
             return False
     
     def load_data_from_hdfs(self, hdfs_path="hdfs://namenode:9000/user/root/wiki_data/wiki_data.jsonl"):
         """Cargar datos desde HDFS"""
         try:
-            logger.info(f"📂 Intentando cargar datos desde: {hdfs_path}")
+            logger.info(f"Intentando cargar datos desde: {hdfs_path}")
             
             # Leer archivo JSONL desde HDFS
             df = self.spark.read.text(hdfs_path)
@@ -182,16 +182,16 @@ class WikiDataAnalyzer:
             parsed_df = parsed_df.filter(col("title").isNotNull())
             
             row_count = parsed_df.count()
-            logger.info(f"✅ Datos cargados desde HDFS: {row_count} registros")
+            logger.info(f"Datos cargados desde HDFS: {row_count} registros")
             
             if row_count == 0:
-                logger.error("❌ No se encontraron datos válidos")
+                logger.error("No se encontraron datos válidos")
                 return None
                 
             return parsed_df
             
         except Exception as e:
-            logger.error(f"❌ Error cargando datos desde HDFS: {e}")
+            logger.error(f"Error cargando datos desde HDFS: {e}")
             return None
     
     def save_to_mysql(self, df, table_name, mode="append"):
@@ -210,17 +210,17 @@ class WikiDataAnalyzer:
                 .mode(mode) \
                 .jdbc(url=mysql_url, table=table_name, properties=properties)
             
-            logger.info(f"✅ {df.count()} registros guardados en tabla {table_name}")
+            logger.info(f"{df.count()} registros guardados en tabla {table_name}")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error guardando en MySQL tabla {table_name}: {e}")
+            logger.error(f"Error guardando en MySQL tabla {table_name}: {e}")
             return False
     
     def analyze_and_save_pages(self, df):
         """Analizar y guardar páginas"""
         try:
-            logger.info("📄 Analizando páginas...")
+            logger.info("Analizando páginas...")
             
             # Preparar datos de páginas
             pages_df = df.select(
@@ -235,12 +235,12 @@ class WikiDataAnalyzer:
             
             # Guardar en MySQL (modo append ya que limpiamos antes)
             if self.save_to_mysql(pages_df, "Page", mode="append"):
-                logger.info(f"✅ {pages_df.count()} páginas guardadas")
+                logger.info(f"{pages_df.count()} páginas guardadas")
                 return True
             return False
             
         except Exception as e:
-            logger.error(f"❌ Error analizando páginas: {e}")
+            logger.error(f"Error analizando páginas: {e}")
             return False
     
     def save_to_mysql_with_upsert(self, df, table_name):
@@ -269,12 +269,12 @@ class WikiDataAnalyzer:
                 df.write \
                     .mode("append") \
                     .jdbc(url=mysql_url, table=table_name, properties=properties)
-            
-            logger.info(f"✅ Registros guardados en tabla {table_name}")
+
+            logger.info(f"Registros guardados en tabla {table_name}")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error guardando en MySQL tabla {table_name}: {e}")
+            logger.error(f"Error guardando en MySQL tabla {table_name}: {e}")
             return False
     
     def save_to_mysql_with_ignore(self, df, table_name, batch_size=1000):
@@ -333,7 +333,7 @@ class WikiDataAnalyzer:
                 data_tuples = [(row['word1'], row['word2'], row['word3']) for row in rows_list]
                 
             else:
-                logger.error(f"❌ Tabla {table_name} no soportada en save_to_mysql_with_ignore")
+                logger.error(f"Tabla {table_name} no soportada en save_to_mysql_with_ignore")
                 return False
             
             # Inserta en lotes pequeños
@@ -342,22 +342,22 @@ class WikiDataAnalyzer:
                 cursor.executemany(insert_query, batch)
                 connection.commit()
 
-            logger.info(f"✅ {len(data_tuples)} registros procesados en tabla {table_name} (duplicados ignorados)")
+            logger.info(f"{len(data_tuples)} registros procesados en tabla {table_name} (duplicados ignorados)")
             cursor.close()
             connection.close()
             return True
 
         except Error as e:
-            logger.error(f"❌ Error en MySQL para tabla {table_name}: {e}")
+            logger.error(f"Error en MySQL para tabla {table_name}: {e}")
             return False
         except Exception as e:
-            logger.error(f"❌ Error guardando en tabla {table_name}: {e}")
+            logger.error(f"Error guardando en tabla {table_name}: {e}")
             return False
     
     def analyze_word_frequency(self, df):
         """Análisis completo de frecuencia de palabras con manejo robusto de duplicados"""
         try:
-            logger.info("🔤 Analizando frecuencia de palabras...")
+            logger.info("Analizando frecuencia de palabras...")
             
             # Explotar palabras y contar por página
             word_page_df = df.select(
@@ -367,7 +367,7 @@ class WikiDataAnalyzer:
             ).filter(col("word").isNotNull() & (col("word") != ""))
             
             if word_page_df.count() == 0:
-                logger.warning("⚠️ No se encontraron palabras para analizar")
+                logger.warning("No se encontraron palabras para analizar")
                 return True
             
             # Contar frecuencias por palabra y página
@@ -422,7 +422,7 @@ class WikiDataAnalyzer:
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error en análisis de palabras: {e}")
+            logger.error(f"Error en análisis de palabras: {e}")
             return False
     
     def save_words_safely(self, word_df):
@@ -458,23 +458,23 @@ class WikiDataAnalyzer:
             cursor.executemany(insert_query, words_data)
             connection.commit()
             
-            logger.info(f"✅ {len(words_data)} palabras procesadas (duplicados ignorados)")
-            
+            logger.info(f"{len(words_data)} palabras procesadas (duplicados ignorados)")
+
             cursor.close()
             connection.close()
             return True
             
         except Error as e:
-            logger.error(f"❌ Error en MySQL: {e}")
+            logger.error(f"Error en MySQL: {e}")
             return False
         except Exception as e:
-            logger.error(f"❌ Error guardando palabras: {e}")
+            logger.error(f"Error guardando palabras: {e}")
             return False
     
     def analyze_bigrams(self, df):
         """Análisis completo de pares de palabras"""
         try:
-            logger.info("🔗 Analizando pares de palabras...")
+            logger.info("Analizando pares de palabras...")
             
             # Explotar bigramas
             bigram_page_df = df.select(
@@ -484,7 +484,7 @@ class WikiDataAnalyzer:
             ).filter(col("bigram").isNotNull() & (col("bigram") != ""))
             
             if bigram_page_df.count() == 0:
-                logger.warning("⚠️ No se encontraron bigramas para analizar")
+                logger.warning("No se encontraron bigramas para analizar")
                 return True
             
             # Separar el bigrama en dos palabras
@@ -549,17 +549,17 @@ class WikiDataAnalyzer:
             if not self.save_to_mysql_with_ignore(top_bigram_pages, "Top2WordsPages"):
                 return False
             
-            logger.info("✅ Análisis de bigramas completado")
+            logger.info("Análisis de bigramas completado")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error en análisis de bigramas: {e}")
+            logger.error(f"Error en análisis de bigramas: {e}")
             return False
     
     def analyze_trigrams(self, df):
         """Análisis completo de tripletas de palabras"""
         try:
-            logger.info("🎯 Analizando tripletas de palabras...")
+            logger.info("Analizando tripletas de palabras...")
             
             # Explotar trigramas
             trigram_page_df = df.select(
@@ -569,7 +569,7 @@ class WikiDataAnalyzer:
             ).filter(col("trigram").isNotNull() & (col("trigram") != ""))
             
             if trigram_page_df.count() == 0:
-                logger.warning("⚠️ No se encontraron trigramas para analizar")
+                logger.warning("No se encontraron trigramas para analizar")
                 return True
             
             # Separar el trigrama en tres palabras
@@ -639,20 +639,20 @@ class WikiDataAnalyzer:
             if not self.save_to_mysql_with_ignore(top_trigram_pages, "Top3WordsPages"):
                 return False
             
-            logger.info("✅ Análisis de trigramas completado")
+            logger.info("Análisis de trigramas completado")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error en análisis de trigramas: {e}")
+            logger.error(f"Error en análisis de trigramas: {e}")
             return False
 
     def analyze_TOP10Pages_by_shared_bigrams(self, df):
         try:
-            logger.info("🔍 Analizando páginas TOP10 por bigramas compartidos...")
+            logger.info("Analizando páginas TOP10 por bigramas compartidos...")
 
             # Validación inicial
             if df is None or df.rdd.isEmpty():
-                logger.warning("⚠️ DataFrame vacío o nulo.")
+                logger.warning("DataFrame vacío o nulo.")
                 return False
 
             # Filtrar filas con bigrams y URL válidas
@@ -665,7 +665,7 @@ class WikiDataAnalyzer:
             ).filter(col("bigram_str").isNotNull() & (length(col("bigram_str")) > 0))
 
             if df_exploded.rdd.isEmpty():
-                logger.warning("⚠️ No hay bigramas válidos para analizar.")
+                logger.warning("No hay bigramas válidos para analizar.")
                 return True
 
             # Evita combinaciones duplicadas (A-B y B-A)
@@ -700,17 +700,17 @@ class WikiDataAnalyzer:
             if not self.save_to_mysql(top10_ids, "Sets2PageXPage", mode="append"):
                 return False
 
-            logger.info("✅ Análisis de TOP10 páginas por bigramas compartidos completado")
+            logger.info("Análisis de TOP10 páginas por bigramas compartidos completado")
             return True
 
         except Exception as e:
-            logger.error(f"❌ Error en análisis de páginas TOP10 por bigramas compartidos: {e}")
-            return False         
-              
+            logger.error("Error en análisis de páginas TOP10 por bigramas compartidos: {e}")
+            return False
+
     def analyze_TOP10Pages_by_shared_trigrams(self, df):
 
         try:
-            logger.info("🔍 Analizando páginas TOP10 por trigramas compartidos...")
+            logger.info("Analizando páginas TOP10 por trigramas compartidos...")
 
             # Explota los trigramas y los convierte a string
             df_exploded = df.select("url", explode(col("trigrams")).alias("trigram_str"))
@@ -745,14 +745,14 @@ class WikiDataAnalyzer:
             return True
 
         except Exception as e:
-            logger.error(f"❌ Error en análisis de páginas TOP10 por trigramas compartidos: {e}")
+            logger.error(f" Error en análisis de páginas TOP10 por trigramas compartidos: {e}")
             return False
 
     def ForEach_Page_Words(self, df):
         """Realiza un análisis de palabras para cada página"""
         try:
-            logger.info("🔍 Analizando palabras por página...")
-            
+            logger.info("Analizando palabras por página...")
+
             # Explota la lista de palabras
             exploded = df.select(col("url"), explode(col("word_list")).alias("word"))
 
@@ -787,16 +787,16 @@ class WikiDataAnalyzer:
             # Guarda la relación PageXWord
             if not self.save_to_mysql(result, "PageXWord", mode="append"):
                 return False
-            logger.info("✅ Análisis de palabras por página completado")
+            logger.info("Análisis de palabras por página completado")
             return True
         except Exception as e:
-            logger.error(f"❌ Error en análisis de palabras por página: {e}")
+            logger.error(f"Error en análisis de palabras por página: {e}")
             return False
 
     def analyze_word_percentage_per_page(self, df):
         "Calcula el porcentaje de cada palabra en el texto total de la página y guarda en PageXWord"
         try:
-            logger.info("📈 Calculando porcentaje de palabras por página...")
+            logger.info("Calculando porcentaje de palabras por página...")
 
             # Explotar palabras y contar por página
             word_page_df = df.select(
@@ -854,17 +854,17 @@ class WikiDataAnalyzer:
             return True
 
         except Exception as e:
-            logger.error(f"❌ Error en porcentaje de palabras: {e}")
+            logger.error(f"Error en porcentaje de palabras: {e}")
             return False
 
     def analyze_link_graph_connections(self, df):
         """Análisis #9: Crear grafo de conexiones entre enlaces para identificar tópicos más interconectados"""
         try:
-            logger.info("🔗 Analizando grafo de conexiones entre enlaces...")
+            logger.info("Analizando grafo de conexiones entre enlaces...")
 
             # Validación inicial del DataFrame
             if df is None or df.rdd.isEmpty():
-                logger.warning("⚠️ DataFrame vacío o nulo para análisis de grafo")
+                logger.warning("DataFrame vacío o nulo para análisis de grafo")
                 return True
 
             # Filtrar páginas con enlaces válidos
@@ -879,7 +879,7 @@ class WikiDataAnalyzer:
             ).distinct()
 
             if pages_with_links.rdd.isEmpty():
-                logger.warning("⚠️ No se encontraron conexiones válidas entre páginas")
+                logger.warning("No se encontraron conexiones válidas entre páginas")
                 return True
 
             # Crear grafo bidireccional (A->B y B->A se cuentan como conexiones)
@@ -944,14 +944,14 @@ class WikiDataAnalyzer:
             if not self._save_hub_analysis(hub_analysis.limit(15)):
                 return False
 
-            logger.info("✅ Análisis de grafo de conexiones completado")
+            logger.info("Análisis de grafo de conexiones completado")
             logger.info(f"   - Total de conexiones analizadas: {connections.count()}")
             logger.info(f"   - Páginas con conexiones: {page_connectivity.filter(col('connectivity_score') > 0).count()}")
             
             return True
 
         except Exception as e:
-            logger.error(f"❌ Error en análisis de grafo de conexiones: {e}")
+            logger.error(f"Error en análisis de grafo de conexiones: {e}")
             return False
 
     def _save_connectivity_results(self, page_connectivity, top_connected_pages, shared_links):
@@ -995,12 +995,12 @@ class WikiDataAnalyzer:
                     )
 
                 # Esto podría guardarse en una tabla personalizada de comunidades
-                logger.info(f"✅ Identificadas {shared_links.count()} relaciones de páginas con enlaces compartidos")
+                logger.info(f"Identificadas {shared_links.count()} relaciones de páginas con enlaces compartidos")
 
             return True
 
         except Exception as e:
-            logger.error(f"❌ Error guardando resultados de conectividad: {e}")
+            logger.error(f"Error guardando resultados de conectividad: {e}")
             return False
 
     def _save_hub_analysis(self, hub_analysis):
@@ -1008,18 +1008,18 @@ class WikiDataAnalyzer:
         try:
             # Esta información podría ser útil para reportes o análisis posteriores
             hub_count = hub_analysis.count()
-            logger.info(f"✅ Identificadas {hub_count} páginas hub principales")
-            
+            logger.info(f"Identificadas {hub_count} páginas hub principales")
+
             # Mostrar top 5 páginas hub para logging
             top_hubs = hub_analysis.select("title", "hub_score", "outgoing_links", "incoming_links").limit(5).collect()
-            logger.info("🎯 Top 5 páginas hub:")
+            logger.info("Top 5 páginas hub:")
             for idx, row in enumerate(top_hubs, 1):
                 logger.info(f"   {idx}. {row['title'][:50]}... (Score: {row['hub_score']:.2f})")
 
             return True
 
         except Exception as e:
-            logger.error(f"❌ Error en análisis de hubs: {e}")
+            logger.error(f"Error en análisis de hubs: {e}")
             return False
 
     def _update_page_connectivity_stats(self, connectivity_df):
@@ -1052,23 +1052,23 @@ class WikiDataAnalyzer:
             if data_tuples:
                 cursor.executemany(update_query, data_tuples)
                 connection.commit()
-                logger.info(f"✅ {len(data_tuples)} páginas actualizadas con estadísticas de conectividad")
+                logger.info(f"{len(data_tuples)} páginas actualizadas con estadísticas de conectividad")
 
             cursor.close()
             connection.close()
             return True
 
         except Error as e:
-            logger.error(f"❌ Error en MySQL actualizando conectividad: {e}")
+            logger.error(f"Error en MySQL actualizando conectividad: {e}")
             return False
         except Exception as e:
-            logger.error(f"❌ Error actualizando estadísticas de conectividad: {e}")
+            logger.error(f"Error actualizando estadísticas de conectividad: {e}")
             return False
 
     def analyze_word_frequency_in_links(self, df):
         """Cuenta cuántas veces se repite cada palabra en los textos de los links de todas las páginas y guarda en Word.total_repetitions"""
         try:
-            logger.info("🔗 Analizando frecuencia de palabras en los textos de los links de todas las páginas...")
+            logger.info("Analizando frecuencia de palabras en los textos de los links de todas las páginas...")
 
             # Obtener todas las páginas enlazadas
             page_links_df = df.select(
@@ -1097,17 +1097,17 @@ class WikiDataAnalyzer:
             if not self.save_words_safely(word_counts):
                 return False
 
-            logger.info("✅ Frecuencia de palabras en links calculada y guardada en Word.total_repetitions")
+            logger.info("Frecuencia de palabras en links calculada y guardada en Word.total_repetitions")
             return True
 
         except Exception as e:
-            logger.error(f"❌ Error en frecuencia de palabras en links: {e}")
+            logger.error(f"Error en frecuencia de palabras en links: {e}")
             return False
 
     def analyze_repeated_links(self, df):
         """Cuenta cuántas veces se repite cada link en todos los links de todas las páginas y guarda en Page.total_repetitions"""
         try:
-            logger.info("🔗 Analizando links repetidos en todas las páginas...")
+            logger.info("Analizando links repetidos en todas las páginas...")
 
             # Explotar todos los links
             all_links = df.select(
@@ -1138,11 +1138,11 @@ class WikiDataAnalyzer:
             if not self.update_page_total_repetitions(updated_pages):
                 return False
 
-            logger.info("✅ Links repetidos contados y guardados en Page.total_repetitions")
+            logger.info("Links repetidos contados y guardados en Page.total_repetitions")
             return True
 
         except Exception as e:
-            logger.error(f"❌ Error en links repetidos: {e}")
+            logger.error(f"Error en links repetidos: {e}")
             return False
 
     def update_page_total_repetitions(self, updated_pages_df):
@@ -1178,30 +1178,30 @@ class WikiDataAnalyzer:
             if data_tuples:
                 cursor.executemany(update_query, data_tuples)
                 connection.commit()
-                logger.info(f"✅ {len(data_tuples)} páginas actualizadas (total_repetitions)")
+                logger.info(f"{len(data_tuples)} páginas actualizadas (total_repetitions)")
             cursor.close()
             connection.close()
             return True
         except Error as e:
-            logger.error(f"❌ Error en MySQL al actualizar Page: {e}")
+            logger.error(f"Error en MySQL al actualizar Page: {e}")
             return False
         except Exception as e:
-            logger.error(f"❌ Error actualizando Page: {e}")
+            logger.error(f"Error actualizando Page: {e}")
             return False
 
     def verify_hdfs_connection(self):
         """Verificar conexión a HDFS"""
         try:
-            logger.info("🔍 Verificando conexión a HDFS...")
+            logger.info("Verificando conexión a HDFS...")
             # Aquí iría la lógica para verificar la conexión a HDFS
 
             # Intentar listar el directorio HDFS
             test_df = self.spark.read.text("hdfs://namenode:9000/")
-            logger.info("✅ Conexión a HDFS exitosa")
+            logger.info("Conexión a HDFS exitosa")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error conectando a HDFS: {e}")
+            logger.error(f"Error conectando a HDFS: {e}")
             return False
     
     def run_complete_analysis(self):
@@ -1213,11 +1213,11 @@ class WikiDataAnalyzer:
             
             # Verificar conexión a HDFS
             if not self.verify_hdfs_connection():
-                logger.error("❌ No se puede conectar a HDFS")
+                logger.error("No se puede conectar a HDFS")
                 return False
             
             # Limpiar tablas antes de comenzar
-            logger.info("🧹 Limpiando datos anteriores...")
+            logger.info("Limpiando datos anteriores...")
             # Como tenemos claves foráneas, simplemente usamos DELETE en lugar de TRUNCATE/DROP
             
             # Cargar datos
@@ -1226,91 +1226,91 @@ class WikiDataAnalyzer:
                 return False
             
             # Mostrar información de los datos cargados
-            logger.info("📊 Información de los datos cargados:")
+            logger.info("Información de los datos cargados:")
             logger.info(f"   - Total de registros: {df.count()}")
             
             # Mostrar muestra de datos
-            logger.info("📋 Muestra de datos:")
+            logger.info("Muestra de datos:")
             df.select("title", "url").show(5, truncate=False)
             
             # Ejecutar análisis secuencial
-            logger.info("📊 Iniciando análisis completo...")
+            logger.info("Iniciando análisis completo...")
             
             # 1. Analizar y guardar páginas
             if not self.analyze_and_save_pages(df):
-                logger.error("❌ Falló el análisis de páginas")
+                logger.error("Falló el análisis de páginas")
                 return False
             
             # # 2. Analizar palabras
             if not self.analyze_word_frequency(df):
-                logger.error("❌ Falló el análisis de palabras")
+                logger.error("Falló el análisis de palabras")
                 return False
             
             # 3. Analizar bigramas
             if not self.analyze_bigrams(df):
-                logger.error("❌ Falló el análisis de bigramas")
+                logger.error("Falló el análisis de bigramas")
                 return False
             
             # 4. Analizar trigramas
             # if not self.analyze_trigrams(df):
-            #    logger.error("❌ Falló el análisis de trigramas")
+            #    logger.error("Falló el análisis de trigramas")
             #    return False
             
             # 5. Analizar TOP10 páginas por bigramas compartidos
             if not self.analyze_TOP10Pages_by_shared_bigrams(df):
-               logger.error("❌ Falló el análisis de TOP10 páginas por bigramas compartidos")
+               logger.error("Falló el análisis de TOP10 páginas por bigramas compartidos")
                return False    
             
             # 6. Analizar TOP10 páginas por trigramas compartidos
             if not self.analyze_TOP10Pages_by_shared_trigrams(df):
-               logger.error("❌ Falló el análisis de TOP10 páginas por trigramas compartidos")
+               logger.error("Falló el análisis de TOP10 páginas por trigramas compartidos")
                return False
             
             # 7. Análisis de palabras por página
             if not self.ForEach_Page_Words(df):
-               logger.error("❌ Falló el análisis de palabras por página")
+               logger.error("Falló el análisis de palabras por página")
                return False
             
             # 8. Porcentaje de palabras por página
             # if not self.analyze_word_percentage_per_page(df):
-            #     logger.error("❌ Falló el análisis de porcentaje de palabras por página")
+            #     logger.error("Falló el análisis de porcentaje de palabras por página")
             #     return False
 
             # 9. Grafo de conexiones entre enlaces
             if not self.analyze_link_graph_connections(df):
-                logger.error("❌ Falló el análisis de grafo de conexiones")
+                logger.error("Falló el análisis de grafo de conexiones")
                 return False
 
             # 10. Frecuencia de palabras en links
             if not self.analyze_word_frequency_in_links(df):
-                logger.error("❌ Falló el análisis de palabras en links")
+                logger.error("Falló el análisis de palabras en links")
                 return False
 
             # 11. Links repetidos
             if not self.analyze_repeated_links(df):
-                logger.error("❌ Falló el análisis de links repetidos")
+                logger.error("Falló el análisis de links repetidos")
                 return False
 
             self.spark.stop()
             
-            logger.info("🎉 Análisis completo terminado exitosamente")
-            logger.info("💾 Todos los datos han sido guardados en MySQL")
+            logger.info("Análisis completo terminado exitosamente")
+            logger.info("Todos los datos han sido guardados en MySQL")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error en análisis completo: {e}")
+            logger.error(f" Error en análisis completo: {e}")
             if self.spark:
                 self.spark.stop()
             return False
 
 if __name__ == "__main__":
-    logger.info("🚀 Iniciando WikiDataAnalyzer...")
+    logger.info("Iniciando WikiDataAnalyzer...")
     analyzer = WikiDataAnalyzer()
     success = analyzer.run_complete_analysis()
     
     if success:
-        logger.info("✅ Proceso completado exitosamente")
+        logger.info("Proceso completado exitosamente")
     else:
-        logger.error("❌ Proceso falló")
-    
+        logger.error("Proceso falló")
+
     sys.exit(0 if success else 1)
